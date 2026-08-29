@@ -80,20 +80,45 @@ app.get('/api/reconstruction/:job_id/results', async (req, res) => {
   }
 });
 
-// Universal Endpoint to load ANY COLMAP / SfM dataset by folder name
+// List all available reconstructed 3D model datasets on disk
+app.get('/api/datasets', async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const root = path.resolve('.');
+    const entries = fs.readdirSync(root, { withFileTypes: true });
+    const datasets = [];
+
+    for (const ent of entries) {
+      if (ent.isDirectory() && !['node_modules', 'dist', 'src', 'public', '.git'].includes(ent.name)) {
+        const pointsPath1 = path.join(root, ent.name, 'sparse', 'points3D.txt');
+        const pointsPath2 = path.join(root, ent.name, 'points3D.txt');
+        if (fs.existsSync(pointsPath1) || fs.existsSync(pointsPath2)) {
+          const target = fs.existsSync(pointsPath1) ? pointsPath1 : pointsPath2;
+          const stat = fs.statSync(target);
+          datasets.push({
+            name: ent.name,
+            lastModified: stat.mtime
+          });
+        }
+      }
+    }
+    return res.json({ datasets });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Universal Endpoint to load ANY COLMAP / SfM dataset with mtime auto-invalidation
 const datasetCache = new Map();
 
 app.get('/api/datasets/:datasetName/sparse', async (req, res) => {
   try {
     const { datasetName } = req.params;
-    if (datasetCache.has(datasetName)) {
-      return res.json(datasetCache.get(datasetName));
-    }
-
     const fs = await import('fs');
     const path = await import('path');
     
-    // Check multiple potential locations (e.g. folder/sparse/points3D.txt or folder/points3D.txt)
+    // Check multiple potential locations
     let pointsPath = path.resolve(datasetName, 'sparse/points3D.txt');
     let imagesPath = path.resolve(datasetName, 'sparse/images.txt');
 
@@ -104,6 +129,14 @@ app.get('/api/datasets/:datasetName/sparse', async (req, res) => {
 
     if (!fs.existsSync(pointsPath)) {
       return res.status(404).json({ error: `Dataset "${datasetName}" with points3D.txt not found` });
+    }
+
+    const currentMtime = fs.statSync(pointsPath).mtimeMs;
+    const cached = datasetCache.get(datasetName);
+
+    // If cache is fresh and file hasn't changed, return it
+    if (cached && cached.mtime === currentMtime && req.query.nocache !== 'true') {
+      return res.json(cached.data);
     }
 
     const pointsContent = fs.readFileSync(pointsPath, 'utf8');
@@ -173,7 +206,7 @@ app.get('/api/datasets/:datasetName/sparse', async (req, res) => {
       cameras
     };
 
-    datasetCache.set(datasetName, result);
+    datasetCache.set(datasetName, { mtime: currentMtime, data: result });
     console.log(`[COLMAP] Loaded ${datasetName}: ${result.pointCount} points, ${cameras.length} cameras.`);
     return res.json(result);
   } catch (err) {

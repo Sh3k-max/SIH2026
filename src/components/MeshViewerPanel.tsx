@@ -30,6 +30,8 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
   // Viewer Mode Selection
   const [viewerMode, setViewerMode] = useState<'inference' | 'demo'>('demo');
   const [structureType, setStructureType] = useState<'building' | 'bridge' | 'solar' | 'terrain'>('building');
+  const [availableDatasets, setAvailableDatasets] = useState<Array<{ name: string; lastModified: string }>>([]);
+  const [activeDataset, setActiveDataset] = useState<string>('system_reconstructed_model');
 
   // Navigation Mode: 'fly' (GeoGuessr Walk/Fly WASD) or 'orbit' (Turntable Inspection)
   const [navMode, setNavMode] = useState<'fly' | 'orbit'>('fly');
@@ -48,6 +50,25 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
     dust3rStatus: string;
     errorDetail?: string;
   } | null>(null);
+
+  const fetchAvailableDatasets = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/datasets`);
+      const data = await res.json();
+      if (data.datasets && data.datasets.length > 0) {
+        setAvailableDatasets(data.datasets);
+        if (!data.datasets.some((d: any) => d.name === activeDataset)) {
+          setActiveDataset(data.datasets[0].name);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch datasets list:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableDatasets();
+  }, []);
 
   // Camera Orbit & Look control states
   const [yaw, setYaw] = useState<number>(-0.4);   
@@ -211,7 +232,7 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
 
     // 5. Build Photogrammetry 3D Real Reconstructed Surface Mesh
     if (structureType === 'building') {
-      loadRealPhotogrammetryMesh('system_reconstructed_model', serverUrl).then(res => {
+      loadRealPhotogrammetryMesh(activeDataset, serverUrl).then(res => {
         if (!res || !res.mesh) {
           return loadRealPhotogrammetryMesh('south-building', serverUrl);
         }
@@ -284,7 +305,7 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
       renderer.dispose();
       container.innerHTML = '';
     };
-  }, [structureType, navMode, lightingIntensity]);
+  }, [structureType, navMode, zoom, lightingIntensity, showGrid, showWireframe, showCameras, serverUrl, activeDataset]);
 
   // Update wireframe mode on existing meshes
   useEffect(() => {
@@ -550,6 +571,39 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
             <h3 className="text-sm font-bold tracking-wide">3D Photogrammetry Controls</h3>
           </div>
 
+          {/* Active 3D Reconstruction Model Selector */}
+          <div className="bg-slate-50 border border-[#E2E8F0] p-3 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Active 3D Model Dataset</span>
+              <button
+                onClick={fetchAvailableDatasets}
+                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCw size={10} />
+                <span>Refresh</span>
+              </button>
+            </div>
+            
+            <select
+              value={activeDataset}
+              onChange={(e) => setActiveDataset(e.target.value)}
+              className="w-full p-2 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-slate-800 cursor-pointer shadow-sm"
+            >
+              {availableDatasets.length > 0 ? (
+                availableDatasets.map((d) => (
+                  <option key={d.name} value={d.name}>
+                    📁 {d.name} {d.name === 'system_reconstructed_model' ? '(Your Generated Model)' : ''}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="system_reconstructed_model">📁 system_reconstructed_model (Your Output)</option>
+                  <option value="south-building">📁 south-building (Benchmark Reference)</option>
+                </>
+              )}
+            </select>
+          </div>
+
           {/* 3D Structure Model Type Selector */}
           {!isInsufficient && activeProject?.isProcessed && (
             <div className="bg-slate-50 border border-[#E2E8F0] p-3 rounded-xl space-y-2">
@@ -563,8 +617,8 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
                       : 'text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  <span>🏢 South Building Complex (Mesh)</span>
-                  <span className="text-[9px] font-mono opacity-80">4K Textures</span>
+                  <span>🏢 Solid Surface Facade</span>
+                  <span className="text-[9px] font-mono opacity-80">Photo Texture</span>
                 </button>
                 <div className="grid grid-cols-2 gap-1">
                   <button
@@ -581,7 +635,7 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
                     onClick={() => setCurrentView && setCurrentView('raycloud')}
                     className="py-1.5 rounded-md text-[10px] font-bold transition cursor-pointer text-center bg-indigo-50 text-[#2563eb] hover:bg-indigo-100"
                   >
-                    ☁️ 61k Pt Cloud →
+                    ☁️ RayCloud Points →
                   </button>
                 </div>
               </div>
