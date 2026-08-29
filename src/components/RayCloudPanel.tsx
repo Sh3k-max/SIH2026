@@ -71,6 +71,12 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
     fetchAvailableDatasets();
   }, []);
 
+  useEffect(() => {
+    if (activeProject?.datasetName) {
+      setActiveDataset(activeProject.datasetName);
+    }
+  }, [activeProject]);
+
   // Viewer Orbit & Look States
   const [yaw, setYaw] = useState<number>(-0.4);   
   const [pitch, setPitch] = useState<number>(0.3);  

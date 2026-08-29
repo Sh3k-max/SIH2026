@@ -80,6 +80,60 @@ app.get('/api/reconstruction/:job_id/results', async (req, res) => {
   }
 });
 
+// Direct Local Photogrammetry Reconstruction Pipeline Runner
+app.post('/api/reconstruct/run', async (req, res) => {
+  try {
+    const { spawn } = await import('child_process');
+    const path = await import('path');
+    const { imagesDir, outputDir, matcher = 'sequential' } = req.body;
+
+    if (!imagesDir || !outputDir) {
+      return res.status(400).json({ error: 'imagesDir and outputDir are required parameters.' });
+    }
+
+    const scriptPath = path.resolve('reconstruct_colmap.py');
+    const absImagesDir = path.resolve(imagesDir);
+    const absOutputDir = path.resolve(outputDir);
+
+    console.log(`[SfM Pipeline] Starting reconstruction on ${absImagesDir} -> ${absOutputDir}`);
+
+    const pyProcess = spawn('python', [
+      scriptPath,
+      '--images_dir', absImagesDir,
+      '--output_dir', absOutputDir,
+      '--matcher', matcher
+    ]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+      console.log(`[SfM Engine]: ${data.toString().trim()}`);
+    });
+
+    pyProcess.stderr.on('data', (data) => {
+      stderrData += data.toString();
+      console.error(`[SfM Stderr]: ${data.toString().trim()}`);
+    });
+
+    pyProcess.on('close', (code) => {
+      console.log(`[SfM Pipeline] Finished with exit code ${code}`);
+      // Invalidate dataset cache so the new model is loaded immediately
+      datasetCache.delete(path.basename(absOutputDir));
+    });
+
+    return res.json({
+      status: 'started',
+      message: `Photogrammetry reconstruction started for ${absOutputDir}`,
+      datasetName: path.basename(absOutputDir)
+    });
+  } catch (err) {
+    console.error('Failed to run reconstruct pipeline:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // List all available reconstructed 3D model datasets on disk
 app.get('/api/datasets', async (req, res) => {
   try {

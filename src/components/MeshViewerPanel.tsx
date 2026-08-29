@@ -70,6 +70,12 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
     fetchAvailableDatasets();
   }, []);
 
+  useEffect(() => {
+    if (activeProject?.datasetName) {
+      setActiveDataset(activeProject.datasetName);
+    }
+  }, [activeProject]);
+
   // Camera Orbit & Look control states
   const [yaw, setYaw] = useState<number>(-0.4);   
   const [pitch, setPitch] = useState<number>(0.3);  

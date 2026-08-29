@@ -12,6 +12,7 @@ export interface Project {
   cameras?: CameraTelemetry[];
   isProcessed?: boolean;
   jobId?: string;
+  datasetName?: string;
 }
 
 export interface CameraTelemetry {
