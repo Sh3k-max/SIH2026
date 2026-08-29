@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AeroMap 3D is a premium Mapping and Photogrammetry application for drone flight planning, point cloud visualization, and volumetric measurements." />
+    <title>AeroMap 3D | Mapping & Photogrammetry Suite</title>
+    <!-- FontAwesome icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <!-- Leaflet.js Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Exif.js for Reading Drone GPS Tags -->
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  </head>
+  <body class="bg-[#F8FAFC] text-[#0F172A] transition-colors duration-200">
+    <div id="root" class="h-screen w-screen overflow-hidden"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
