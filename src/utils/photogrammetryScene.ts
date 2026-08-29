@@ -511,10 +511,10 @@ export function generateDensePointCloud(type: 'building' | 'bridge' | 'solar' | 
   return new THREE.Points(geometry, material);
 }
 
-// 4. Load Real COLMAP Reconstruction from south-building dataset
-export async function loadSouthBuildingPointCloud(serverUrl: string = 'http://localhost:5000'): Promise<{ points: THREE.Points; count: number; cameras: Array<{ name: string; x: number; y: number; z: number }> } | null> {
+// 4. Universal Loader for any COLMAP / Reconstructed Dataset
+export async function loadDatasetPointCloud(datasetName: string = 'south-building', serverUrl: string = 'http://localhost:5000'): Promise<{ points: THREE.Points; count: number; cameras: Array<{ name: string; x: number; y: number; z: number }> } | null> {
   try {
-    const res = await fetch(`${serverUrl}/api/datasets/south-building/sparse`);
+    const res = await fetch(`${serverUrl}/api/datasets/${datasetName}/sparse`);
     if (!res.ok) throw new Error('Dataset endpoint returned ' + res.status);
     const data = await res.json();
     if (!data.positions || data.positions.length === 0) return null;
@@ -534,16 +534,14 @@ export async function loadSouthBuildingPointCloud(serverUrl: string = 'http://lo
     const avgY = sumY / pCount;
     const avgZ = sumZ / pCount;
 
-    // Scaling factor to scale COLMAP unit coordinates to comfortable Three.js units (~180m span)
     const scale = 40.0;
 
     const positions = new Float32Array(pCount * 3);
     const colors = new Float32Array(rawCol);
 
     for (let i = 0; i < pCount; i++) {
-      // Shift center and orient right-side up
       positions[i * 3] = (rawPos[i * 3] - avgX) * scale;
-      positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale; // Invert Y (COLMAP camera Y is down)
+      positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale;
       positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
     }
 
@@ -570,7 +568,11 @@ export async function loadSouthBuildingPointCloud(serverUrl: string = 'http://lo
       cameras: scaledCameras
     };
   } catch (e) {
-    console.error('Failed to load south-building dataset:', e);
+    console.error(`Failed to load dataset ${datasetName}:`, e);
     return null;
   }
+}
+
+export async function loadSouthBuildingPointCloud(serverUrl: string = 'http://localhost:5000') {
+  return loadDatasetPointCloud('south-building', serverUrl);
 }

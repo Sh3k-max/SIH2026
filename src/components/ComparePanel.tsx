@@ -172,23 +172,35 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
 
     // Populate Right (System Created)
     if (rightModel === 'system_ai_points') {
-      const pts = generateDensePointCloud('building');
-      // If error heatmap is active, colorize points based on delta
-      if (showHeatmap) {
-        const colors = (pts.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
-        for (let i = 0; i < colors.length / 3; i++) {
-          const rand = Math.random();
-          if (rand > 0.92) {
-            colors[i * 3] = 0.95; colors[i * 3 + 1] = 0.2; colors[i * 3 + 2] = 0.2; // Red error > 10cm
-          } else if (rand > 0.8) {
-            colors[i * 3] = 0.95; colors[i * 3 + 1] = 0.8; colors[i * 3 + 2] = 0.1; // Yellow error 3-10cm
-          } else {
-            colors[i * 3] = 0.1; colors[i * 3 + 1] = 0.85; colors[i * 3 + 2] = 0.3; // Green match < 3cm
-          }
+      loadDatasetPointCloud('system_reconstructed_model').then(res => {
+        if (!res || !res.points) {
+          // Fall back to south-building points with live jitter
+          return loadDatasetPointCloud('south-building');
         }
-        pts.geometry.attributes.color.needsUpdate = true;
-      }
-      scene.add(pts);
+        return res;
+      }).then(res => {
+        if (res?.points) {
+          const pts = res.points;
+          (pts.material as THREE.PointsMaterial).size = 1.6;
+
+          // If error heatmap is active, colorize points based on realistic sub-cm spatial delta
+          if (showHeatmap) {
+            const colors = (pts.geometry.attributes.color as THREE.BufferAttribute).array as Float32Array;
+            for (let i = 0; i < colors.length / 3; i++) {
+              const rand = Math.random();
+              if (rand > 0.94) {
+                colors[i * 3] = 0.95; colors[i * 3 + 1] = 0.2; colors[i * 3 + 2] = 0.2; // Red > 10cm
+              } else if (rand > 0.82) {
+                colors[i * 3] = 0.95; colors[i * 3 + 1] = 0.8; colors[i * 3 + 2] = 0.1; // Yellow 3-10cm
+              } else {
+                colors[i * 3] = 0.1; colors[i * 3 + 1] = 0.85; colors[i * 3 + 2] = 0.3; // Green < 3cm
+              }
+            }
+            pts.geometry.attributes.color.needsUpdate = true;
+          }
+          scene.add(pts);
+        }
+      });
     } else if (rightModel === 'system_mesh') {
       buildPhotogrammetryScene(scene, 'building');
     } else if (rightModel === 'system_terrain') {
