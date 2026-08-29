@@ -13,7 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import type { Project } from '../types';
-import { buildPhotogrammetryScene } from '../utils/photogrammetryScene';
+import { buildPhotogrammetryScene, loadRealPhotogrammetryMesh } from '../utils/photogrammetryScene';
 
 interface MeshViewerPanelProps {
   activeProject: Project | null;
@@ -209,8 +209,31 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
 
-    // 5. Build Photogrammetry 3D Textured Model
-    buildPhotogrammetryScene(scene, structureType);
+    // 5. Build Photogrammetry 3D Real Reconstructed Surface Mesh
+    if (structureType === 'building') {
+      loadRealPhotogrammetryMesh('south-building', serverUrl).then(res => {
+        if (res?.mesh) {
+          scene.add(res.mesh);
+
+          // Add real drone camera pyramids
+          if (showCameras && res.cameras && res.cameras.length > 0) {
+            const camGroup = new THREE.Group();
+            const pyrMat = new THREE.MeshBasicMaterial({ color: '#38bdf8', wireframe: true });
+            res.cameras.forEach(c => {
+              const pyr = new THREE.Mesh(new THREE.ConeGeometry(2.5, 4, 4), pyrMat);
+              pyr.position.set(c.x, c.y, c.z);
+              pyr.rotation.x = Math.PI;
+              camGroup.add(pyr);
+            });
+            scene.add(camGroup);
+          }
+        } else {
+          buildPhotogrammetryScene(scene, structureType);
+        }
+      });
+    } else {
+      buildPhotogrammetryScene(scene, structureType);
+    }
 
     // 6. Animation / Render loop
     const animate = () => {
