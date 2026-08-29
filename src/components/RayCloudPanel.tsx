@@ -29,13 +29,15 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
   
   // Viewer Mode Selection
   const [viewerMode, setViewerMode] = useState<'inference' | 'demo'>('demo');
-  const [structureType, setStructureType] = useState<'south-building' | 'building' | 'terrain'>('south-building');
+  const [structureType, setStructureType] = useState<'south-building' | 'building' | 'bridge' | 'solar' | 'terrain'>('south-building');
+  const [availableDatasets, setAvailableDatasets] = useState<Array<{ name: string; lastModified: string }>>([]);
+  const [activeDataset, setActiveDataset] = useState<string>('system_reconstructed_model');
   const [pointCountDisplay, setPointCountDisplay] = useState<number>(61514);
 
   // Navigation Mode: 'fly' (GeoGuessr Walk/Fly WASD) or 'orbit' (Turntable Inspection)
   const [navMode, setNavMode] = useState<'fly' | 'orbit'>('fly');
-  const [camPos, setCamPos] = useState<{ x: 0, y: 30, z: 160 }>({ x: 0, y: 30, z: 160 });
-  const [moveSpeed, setMoveSpeed] = useState<number>(14);
+  const [camPos, setCamPos] = useState<{ x: 0; y: 45; z: 240 }>({ x: 0, y: 45, z: 240 });
+  const [moveSpeed, setMoveSpeed] = useState<number>(16);
 
   // Server Connection States
   const [serverUrl, setServerUrl] = useState<string>('http://localhost:5000');
@@ -49,6 +51,25 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
     dust3rStatus: string;
     errorDetail?: string;
   } | null>(null);
+
+  const fetchAvailableDatasets = async () => {
+    try {
+      const res = await fetch(`${serverUrl}/api/datasets`);
+      const data = await res.json();
+      if (data.datasets && data.datasets.length > 0) {
+        setAvailableDatasets(data.datasets);
+        if (!data.datasets.some((d: any) => d.name === activeDataset)) {
+          setActiveDataset(data.datasets[0].name);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch datasets list:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableDatasets();
+  }, []);
 
   // Viewer Orbit & Look States
   const [yaw, setYaw] = useState<number>(-0.4);   
@@ -198,7 +219,7 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
 
     // 6. Generate or Load Real Photogrammetric Point Cloud
     if (structureType === 'south-building') {
-      loadDatasetPointCloud('system_reconstructed_model', serverUrl).then(res => {
+      loadDatasetPointCloud(activeDataset, serverUrl).then(res => {
         if (!res || !res.points) {
           return loadSouthBuildingPointCloud(serverUrl);
         }
@@ -293,7 +314,7 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
       renderer.dispose();
       container.innerHTML = '';
     };
-  }, [structureType, navMode, showGrid, showCameras]);
+  }, [structureType, navMode, showGrid, showCameras, activeDataset, serverUrl]);
 
   // Update point size
   useEffect(() => {
@@ -546,6 +567,39 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
             <h3 className="text-sm font-bold tracking-wide">RayCloud Point Controls</h3>
           </div>
 
+          {/* Active 3D Reconstruction Model Selector */}
+          <div className="bg-slate-50 border border-[#E2E8F0] p-3 rounded-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Active 3D Model Dataset</span>
+              <button
+                onClick={fetchAvailableDatasets}
+                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCw size={10} />
+                <span>Refresh</span>
+              </button>
+            </div>
+            
+            <select
+              value={activeDataset}
+              onChange={(e) => setActiveDataset(e.target.value)}
+              className="w-full p-2 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-slate-800 cursor-pointer shadow-sm"
+            >
+              {availableDatasets.length > 0 ? (
+                availableDatasets.map((d) => (
+                  <option key={d.name} value={d.name}>
+                    📁 {d.name} {d.name === 'system_reconstructed_model' ? '(Your Generated Model)' : ''}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="system_reconstructed_model">📁 system_reconstructed_model (Your Output)</option>
+                  <option value="south-building">📁 south-building (Benchmark Reference)</option>
+                </>
+              )}
+            </select>
+          </div>
+
           {/* 3D Structure Model Type Selector */}
           {!isInsufficient && activeProject?.isProcessed && (
             <div className="bg-slate-50 border border-[#E2E8F0] p-3 rounded-xl space-y-2">
@@ -559,8 +613,8 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
                       : 'text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  <span>🏛️ South Building (Your Real Photos)</span>
-                  <span className="text-[9px] font-mono opacity-80">61,514 pts</span>
+                  <span>🏛️ Raw Reconstructed 3D Points</span>
+                  <span className="text-[9px] font-mono opacity-80">{pointCountDisplay.toLocaleString()} pts</span>
                 </button>
                 <div className="grid grid-cols-2 gap-1">
                   <button
