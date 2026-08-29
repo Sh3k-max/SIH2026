@@ -611,19 +611,22 @@ export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-bu
       positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
     }
 
-    // Generate Delaunay / spatial surface indices for solid triangular faces
-    const indices: number[] = [];
-    const maxEdgeDistSq = 14.0 * 14.0; // Connect nearby neighbor points into solid surface facets
+    // Generate clean solid surface geometry without distant spiky shards
+    // Create disc surfels / high-density solid surface elements
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    // Spatial grid binning for high-speed local neighborhood triangulation
-    const step = 1;
-    for (let i = 0; i < pCount - 2; i += step) {
+    // Optional tight edge triangulation (only connecting very close neighbors < 1.8 units)
+    const indices: number[] = [];
+    const maxEdgeDistSq = 2.2 * 2.2; // Strict local neighborhood to prevent spiky cross-space triangles
+
+    for (let i = 0; i < pCount - 2; i += 2) {
       const p1x = positions[i * 3];
       const p1y = positions[i * 3 + 1];
       const p1z = positions[i * 3 + 2];
 
-      // Find nearest neighbors to form triangles
-      for (let j = i + 1; j < Math.min(pCount - 1, i + 18); j++) {
+      for (let j = i + 1; j < Math.min(pCount - 1, i + 8); j++) {
         const p2x = positions[j * 3];
         const p2y = positions[j * 3 + 1];
         const p2z = positions[j * 3 + 2];
@@ -631,7 +634,7 @@ export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-bu
         const d12 = (p1x - p2x) ** 2 + (p1y - p2y) ** 2 + (p1z - p2z) ** 2;
         if (d12 > maxEdgeDistSq) continue;
 
-        for (let k = j + 1; k < Math.min(pCount, j + 12); k++) {
+        for (let k = j + 1; k < Math.min(pCount, j + 6); k++) {
           const p3x = positions[k * 3];
           const p3y = positions[k * 3 + 1];
           const p3z = positions[k * 3 + 2];
@@ -646,25 +649,34 @@ export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-bu
       }
     }
 
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     if (indices.length > 0) {
       geometry.setIndex(indices);
     }
     geometry.computeVertexNormals();
 
-    const material = new THREE.MeshStandardMaterial({
+    // Create dual-layer solid surface: Smooth PBR Mesh + Dense Color Surfel points
+    const meshMat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.65,
-      metalness: 0.15,
+      roughness: 0.8,
+      metalness: 0.1,
       side: THREE.DoubleSide,
-      flatShading: false
+      flatShading: true
     });
 
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    const meshGroup = new THREE.Group();
+    const surfaceMesh = new THREE.Mesh(geometry, meshMat);
+    surfaceMesh.castShadow = true;
+    surfaceMesh.receiveShadow = true;
+    meshGroup.add(surfaceMesh);
+
+    // Add high-density surfel point layer for razor-sharp photo detail
+    const surfelMat = new THREE.PointsMaterial({
+      size: 1.8,
+      vertexColors: true,
+      sizeAttenuation: true
+    });
+    const surfelPoints = new THREE.Points(geometry, surfelMat);
+    meshGroup.add(surfelPoints);
 
     const scaledCameras = (data.cameras || []).map((c: { name: string; x: number; y: number; z: number }) => ({
       name: c.name,
@@ -674,7 +686,7 @@ export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-bu
     }));
 
     return {
-      mesh,
+      mesh: meshGroup as unknown as THREE.Mesh,
       count: pCount,
       cameras: scaledCameras
     };
