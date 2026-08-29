@@ -6,6 +6,7 @@ import { MapPanel } from './components/MapPanel';
 import { RayCloudPanel } from './components/RayCloudPanel';
 import { VolumesPanel } from './components/VolumesPanel';
 import { MeshViewerPanel } from './components/MeshViewerPanel';
+import { ComparePanel } from './components/ComparePanel';
 import type { Project, CameraTelemetry } from './types';
 import { MOCK_PROJECTS } from './types';
 import { 
@@ -38,7 +39,7 @@ export default function App() {
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const [projectList, setProjectList] = useState<Project[]>(MOCK_PROJECTS);
 
-  const isWorkspaceView = ['dashboard', 'map', 'raycloud', 'mesh', 'volumes', 'processing'].includes(currentView);
+  const isWorkspaceView = ['dashboard', 'map', 'raycloud', 'mesh', 'compare', 'volumes', 'processing'].includes(currentView);
 
   // Ensure dark class is removed on mount
   useEffect(() => {
@@ -1076,6 +1077,14 @@ export default function App() {
           {/* VIEW: 3D TEXTURED MESH VIEWER */}
           {currentView === 'mesh' && activeProject && (
             <MeshViewerPanel
+              activeProject={activeProject}
+              setCurrentView={setCurrentView}
+            />
+          )}
+
+          {/* VIEW: DUAL 3D MODEL COMPARISON INSPECTOR */}
+          {currentView === 'compare' && activeProject && (
+            <ComparePanel
               activeProject={activeProject}
               setCurrentView={setCurrentView}
             />
