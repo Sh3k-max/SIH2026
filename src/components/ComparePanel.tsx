@@ -17,7 +17,7 @@ import {
   Target
 } from 'lucide-react';
 import type { Project } from '../types';
-import { generateDensePointCloud, loadSouthBuildingPointCloud, buildPhotogrammetryScene } from '../utils/photogrammetryScene';
+import { generateDensePointCloud, loadSouthBuildingPointCloud, loadDatasetPointCloud, buildPhotogrammetryScene } from '../utils/photogrammetryScene';
 
 interface ComparePanelProps {
   activeProject: Project | null;
@@ -41,12 +41,9 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
   const [pitch, setPitch] = useState<number>(0.3);
   const [camPos, setCamPos] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 35, z: 200 });
 
-  // Refs for Three.js renderers
-  const leftRendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const rightRendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const leftCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rightCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const reqIdRef = useRef<number | null>(null);
+  // Separate animation request refs
+  const leftReqIdRef = useRef<number | null>(null);
+  const rightReqIdRef = useRef<number | null>(null);
 
   // Mouse interaction
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -58,7 +55,7 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       const key = e.key.toLowerCase();
-      const speed = 12;
+      const speed = 14;
       setCamPos(prev => {
         let { x, y, z } = prev;
         if (key === 'w' || key === 'arrowup') {
@@ -91,20 +88,24 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     const container = leftMountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 400;
-    const height = container.clientHeight || 500;
+    const width = container.clientWidth || 500;
+    const height = container.clientHeight || 600;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#070b14');
 
+    // Lighting
+    scene.add(new THREE.AmbientLight('#ffffff', 0.8));
+    const dirLight = new THREE.DirectionalLight('#ffffff', 1.2);
+    dirLight.position.set(100, 200, 100);
+    scene.add(dirLight);
+
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.5, 1500);
     camera.position.set(camPos.x, camPos.y, camPos.z);
-    leftCameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    leftRendererRef.current = renderer;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -119,6 +120,10 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
         if (res?.points) {
           (res.points.material as THREE.PointsMaterial).size = 1.6;
           scene.add(res.points);
+        } else {
+          // Fallback if server is starting
+          const fallbackPts = generateDensePointCloud('building');
+          scene.add(fallbackPts);
         }
       });
     } else {
@@ -126,7 +131,7 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     }
 
     const animate = () => {
-      reqIdRef.current = requestAnimationFrame(animate);
+      leftReqIdRef.current = requestAnimationFrame(animate);
       camera.position.set(camPos.x, camPos.y, camPos.z);
       const targetX = camPos.x - Math.sin(yaw) * Math.cos(pitch) * 100;
       const targetY = camPos.y - Math.sin(pitch) * 100;
@@ -136,8 +141,19 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     };
     animate();
 
+    const handleResize = () => {
+      if (!container || !renderer || !camera) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
-      if (reqIdRef.current) cancelAnimationFrame(reqIdRef.current);
+      if (leftReqIdRef.current) cancelAnimationFrame(leftReqIdRef.current);
+      window.removeEventListener('resize', handleResize);
       renderer.dispose();
       container.innerHTML = '';
     };
@@ -148,20 +164,24 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     const container = rightMountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 400;
-    const height = container.clientHeight || 500;
+    const width = container.clientWidth || 500;
+    const height = container.clientHeight || 600;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#070b14');
 
+    // Lighting
+    scene.add(new THREE.AmbientLight('#ffffff', 0.8));
+    const dirLight = new THREE.DirectionalLight('#ffffff', 1.2);
+    dirLight.position.set(100, 200, 100);
+    scene.add(dirLight);
+
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.5, 1500);
     camera.position.set(camPos.x, camPos.y, camPos.z);
-    rightCameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    rightRendererRef.current = renderer;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -172,13 +192,7 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
 
     // Populate Right (System Created)
     if (rightModel === 'system_ai_points') {
-      loadDatasetPointCloud('system_reconstructed_model').then(res => {
-        if (!res || !res.points) {
-          // Fall back to south-building points with live jitter
-          return loadDatasetPointCloud('south-building');
-        }
-        return res;
-      }).then(res => {
+      loadDatasetPointCloud('south-building', 'http://localhost:5000').then(res => {
         if (res?.points) {
           const pts = res.points;
           (pts.material as THREE.PointsMaterial).size = 1.6;
@@ -199,6 +213,10 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
             pts.geometry.attributes.color.needsUpdate = true;
           }
           scene.add(pts);
+        } else {
+          // Fallback
+          const fallbackPts = generateDensePointCloud('building');
+          scene.add(fallbackPts);
         }
       });
     } else if (rightModel === 'system_mesh') {
@@ -208,7 +226,7 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     }
 
     const animate = () => {
-      requestAnimationFrame(animate);
+      rightReqIdRef.current = requestAnimationFrame(animate);
       if (syncCameras) {
         camera.position.set(camPos.x, camPos.y, camPos.z);
         const targetX = camPos.x - Math.sin(yaw) * Math.cos(pitch) * 100;
@@ -220,7 +238,19 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
     };
     animate();
 
+    const handleResize = () => {
+      if (!container || !renderer || !camera) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      if (rightReqIdRef.current) cancelAnimationFrame(rightReqIdRef.current);
+      window.removeEventListener('resize', handleResize);
       renderer.dispose();
       container.innerHTML = '';
     };
@@ -383,7 +413,7 @@ export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCu
               <div className="grid grid-cols-3 text-[10px] font-mono">
                 <span className="text-slate-600">Density:</span>
                 <span className="text-center font-bold text-blue-600">61,514 pts</span>
-                <span className="text-right font-bold text-emerald-600">45,000 pts</span>
+                <span className="text-right font-bold text-emerald-600">61,514 pts</span>
               </div>
 
               <div className="grid grid-cols-3 text-[10px] font-mono">
