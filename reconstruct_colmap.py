@@ -91,8 +91,23 @@ def run_photogrammetry(images_dir: str, output_dir: str, matcher_type: str = "se
 
     # Export Standard .PLY Point Cloud
     ply_path = output_path / "reconstruction_dense.ply"
-    recon.write_ply(str(ply_path))
-    print(f"      -> Exported 3D Point Cloud (.PLY): {ply_path}")
+    try:
+        with open(ply_path, "w") as f:
+            f.write("ply\n")
+            f.write("format ascii 1.0\n")
+            f.write(f"element vertex {num_points}\n")
+            f.write("property float x\n")
+            f.write("property float y\n")
+            f.write("property float z\n")
+            f.write("property uchar red\n")
+            f.write("property uchar green\n")
+            f.write("property uchar blue\n")
+            f.write("end_header\n")
+            for pt_id, pt in recon.points3D.items():
+                f.write(f"{pt.xyz[0]:.6f} {pt.xyz[1]:.6f} {pt.xyz[2]:.6f} {int(pt.color[0])} {int(pt.color[1])} {int(pt.color[2])}\n")
+        print(f"      -> Exported 3D Point Cloud (.PLY): {ply_path}")
+    except Exception as e:
+        print(f"      -> PLY export note: {e}")
 
     print("\n=================================================================")
     print(f"[SUCCESS] Reconstructed {num_points:,} 3D Points across {num_reg_images} Registered Cameras!")

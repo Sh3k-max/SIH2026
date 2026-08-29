@@ -211,7 +211,12 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
 
     // 5. Build Photogrammetry 3D Real Reconstructed Surface Mesh
     if (structureType === 'building') {
-      loadRealPhotogrammetryMesh('south-building', serverUrl).then(res => {
+      loadRealPhotogrammetryMesh('system_reconstructed_model', serverUrl).then(res => {
+        if (!res || !res.mesh) {
+          return loadRealPhotogrammetryMesh('south-building', serverUrl);
+        }
+        return res;
+      }).then(res => {
         if (res?.mesh) {
           scene.add(res.mesh);
 

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { MOCK_CAMERAS } from '../types';
 import type { Project } from '../types';
-import { generateDensePointCloud, loadSouthBuildingPointCloud } from '../utils/photogrammetryScene';
+import { generateDensePointCloud, loadSouthBuildingPointCloud, loadDatasetPointCloud } from '../utils/photogrammetryScene';
 
 interface RayCloudPanelProps {
   activeProject: Project | null;
@@ -198,7 +198,12 @@ export const RayCloudPanel: React.FC<RayCloudPanelProps> = ({ activeProject, set
 
     // 6. Generate or Load Real Photogrammetric Point Cloud
     if (structureType === 'south-building') {
-      loadSouthBuildingPointCloud(serverUrl).then((res) => {
+      loadDatasetPointCloud('system_reconstructed_model', serverUrl).then(res => {
+        if (!res || !res.points) {
+          return loadSouthBuildingPointCloud(serverUrl);
+        }
+        return res;
+      }).then((res) => {
         if (res && res.points) {
           (res.points.material as THREE.PointsMaterial).size = pointSize;
           scene.add(res.points);
