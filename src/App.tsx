@@ -21,11 +21,21 @@ import {
   Globe,
   Trash2
 } from 'lucide-react';
-import heroScanBg from './assets/hero_scan_bg.png';
-import bridgeWireframe from './assets/bridge_wireframe.png';
-import stockpileDem from './assets/stockpile_dem.png';
-import concreteDamage from './assets/concrete_damage.png';
-import solarOverhang from './assets/solar_overhang.png';
+import heroVideoBg from './assets/Timeline 1.mov';
+import bridgeWireframe from 'D:\\clone\\src\\assets\\ChatGPT_Image_Aug_30_2026_04_33_05_PM.png';
+import stockpileDem from './assets/image.png';
+import concreteDamage from './assets/ChatGPT_Image_Aug_30_2026_04_38_12_PM.png';
+import solarOverhang from './assets/ChatGPT_Image_Aug_30_2026_04_42_04_PM.png';
+import droneBridgeInspectionFeatured from './assets/drone-bridge-inspection-featured-1024x576.webp';
+import screenshotCaseStudy from './assets/Screenshot-2025-09-29-at-12.06.05-PM-1024x582.png';
+import droneCommercialRoof from './assets/dima90__A_drone_flying_over_a_large_commercial_roof_capturing_i_13a1174b-42a6-46da-8bc1-bc15026d0812.png';
+import dronesElectricitySector from './assets/drones-electricity_sector_15.png';
+import telecomTowers from './assets/df68b3_9d2c49b3ef88458d857201041c622eeamv2.png';
+import droneBridgeBackgrndP1 from './assets/drone_bridge_backgrnd_P1.png';
+import defineVolumeImg from './assets/6017532dc38df74de0d6d4b7303e3fa7092e7e3d-1408x792.avif';
+import captureDataImg from './assets/62442526003ef063114ba874d8055e6d1805c75b-1408x793.avif';
+import analyzeDataImg from './assets/1580ffb8d14e0c7cdf28769bfafd708bd0135664-1408x792.avif';
+import demoVideo from './assets/0829(1).mp4';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('home');
@@ -143,10 +153,19 @@ export default function App() {
             <div className="w-full h-full flex flex-col bg-slate-50 text-slate-900 select-none">
               
               {/* Above the fold: Hero Landing Section */}
-              <div 
-                className="w-full min-h-screen relative flex flex-col justify-between overflow-hidden bg-cover bg-center shrink-0"
-                style={{ backgroundImage: `url(${heroScanBg})` }}
-              >
+              <div className="w-full min-h-screen relative flex flex-col justify-between overflow-hidden shrink-0">
+                {/* Background Video */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover z-0"
+                >
+                  <source src={heroVideoBg} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+
                 {/* Dark Overlay for premium look & readability */}
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] z-10" />
 
@@ -383,11 +402,8 @@ export default function App() {
                     <p className="text-xs text-slate-500 leading-relaxed flex-1">
                       Use the 2D map viewer to set a bounding box around the physical structure, setting vertical floor and ceiling limits.
                     </p>
-                    <div className="bg-slate-50 rounded-xl border border-slate-100 aspect-video flex items-center justify-center p-2 mt-4 select-none">
-                      <svg className="h-12 w-12 text-[#2563eb]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 8h8v8H8V8z" />
-                      </svg>
+                    <div className="w-full aspect-video relative overflow-hidden rounded-xl border border-slate-100 mt-4 select-none">
+                      <img src={defineVolumeImg} className="absolute inset-0 w-full h-full object-cover" alt="Define Volume" />
                     </div>
                   </div>
 
@@ -400,10 +416,8 @@ export default function App() {
                     <p className="text-xs text-slate-500 leading-relaxed flex-1">
                       AeroMap's adaptive flight engine generates optimal capture overlap plans and pilots the drone autonomously.
                     </p>
-                    <div className="bg-slate-50 rounded-xl border border-slate-100 aspect-video flex items-center justify-center p-2 mt-4 select-none">
-                      <svg className="h-12 w-12 text-[#2563eb]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
+                    <div className="w-full aspect-video relative overflow-hidden rounded-xl border border-slate-100 mt-4 select-none">
+                      <img src={captureDataImg} className="absolute inset-0 w-full h-full object-cover" alt="Capture Data" />
                     </div>
                   </div>
 
@@ -416,10 +430,8 @@ export default function App() {
                     <p className="text-xs text-slate-500 leading-relaxed flex-1">
                       Export image datasets directly to the photogrammetry engine to build 3D mesh block models.
                     </p>
-                    <div className="bg-slate-50 rounded-xl border border-slate-100 aspect-video flex items-center justify-center p-2 mt-4 select-none">
-                      <svg className="h-12 w-12 text-[#2563eb]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                      </svg>
+                    <div className="w-full aspect-video relative overflow-hidden rounded-xl border border-slate-100 mt-4 select-none">
+                      <img src={analyzeDataImg} className="absolute inset-0 w-full h-full object-cover" alt="Analyze Data" />
                     </div>
                   </div>
 
@@ -454,38 +466,20 @@ export default function App() {
                     <span className="text-[9.5px] font-mono text-slate-400 ml-2">AeroMap 3D Survey Workspace Panel</span>
                   </div>
                   
-                  {/* Map mockup illustration */}
-                  <div className="w-full aspect-video rounded-xl bg-slate-200 border border-slate-350 relative overflow-hidden flex flex-col justify-between p-4">
-                    <div className="absolute inset-0 bg-[#e2e8f0] opacity-40 bg-grid-pattern" />
+                  {/* Map mockup illustration replaced by video */}
+                  <div className="w-full aspect-video rounded-xl bg-slate-200  relative overflow-hidden select-none">
+                    <video
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="absolute inset-0 w-full h-full object-cover z-0"
+                    >
+                      <source src={demoVideo} type="video/mp4" />
+                      Your browser does not support the video tag.
+                    </video>
                     
-                    {/* Bounding box outline */}
-                    <div className="absolute top-[20%] left-[25%] w-[45%] h-[55%] border-2 border-dashed border-[#2563eb] rounded-lg bg-blue-500/10 flex items-center justify-center z-10 animate-pulse">
-                      <span className="text-[10px] font-mono font-bold text-[#2563eb] bg-white border border-blue-200 px-2 py-0.5 rounded shadow">
-                        Active Bounding Box Volume
-                      </span>
-                    </div>
-
-                    {/* Camera points */}
-                    <div className="absolute top-[15%] left-[20%] w-3 h-3 rounded-full bg-[#2563eb] border border-white shadow" />
-                    <div className="absolute top-[18%] left-[75%] w-3 h-3 rounded-full bg-[#2563eb] border border-white shadow" />
-                    <div className="absolute top-[80%] left-[45%] w-3 h-3 rounded-full bg-[#2563eb] border border-white shadow" />
-                    <div className="absolute top-[50%] left-[15%] w-3 h-3 rounded-full bg-[#2563eb] border border-white shadow" />
-                    <div className="absolute top-[40%] left-[80%] w-3 h-3 rounded-full bg-[#2563eb] border border-white shadow" />
-
-                    <div className="flex justify-between items-start z-10 select-none">
-                      <div className="bg-white/90 backdrop-blur-sm border border-slate-250 p-2.5 rounded-lg shadow-md space-y-1.5 w-44">
-                        <div className="text-[9px] font-bold text-slate-400 uppercase">Geotag Data</div>
-                        <div className="text-[10.5px] font-mono font-bold text-slate-800">42 Images Selected</div>
-                        <div className="text-[9px] font-mono text-slate-500">EPSG:4326 Datum Projection</div>
-                      </div>
-
-                      <div className="bg-white/90 backdrop-blur-sm border border-slate-250 p-2.5 rounded-lg shadow-md space-y-1 w-32 text-right">
-                        <div className="text-[9px] font-bold text-slate-400 uppercase">Coverage</div>
-                        <div className="text-xs font-bold text-emerald-600">100% Matched</div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end z-10 select-none">
+                    <div className="absolute bottom-18 right-12 z-10">
                       <button 
                         onClick={() => {
                           if (isLoggedIn) {
@@ -494,7 +488,7 @@ export default function App() {
                             setCurrentView('signin');
                           }
                         }}
-                        className="bg-slate-950 text-white hover:bg-slate-800 text-[10.5px] font-bold px-4 py-2 rounded-lg transition shadow cursor-pointer"
+                        className="bg-slate-950/90 backdrop-blur-xs text-white hover:bg-slate-800 text-[10.5px] font-bold px-4 py-2 rounded-lg transition shadow-lg cursor-pointer"
                       >
                         Enter Mapping Workspace
                       </button>
@@ -516,11 +510,8 @@ export default function App() {
                   
                   {/* Card 1 */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                    <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center p-8 relative select-none">
-                      <svg className="h-16 w-16 text-slate-350" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                      <span className="absolute bottom-2 right-2 text-[9px] font-mono text-slate-400 bg-slate-50 border px-1.5 py-0.5 rounded">3D Point Cloud</span>
+                    <div className="w-full aspect-video relative overflow-hidden border-b border-slate-200 select-none">
+                      <img src={droneBridgeBackgrndP1} className="absolute inset-0 w-full h-full object-cover" alt="Bridge columns / piers" />
                     </div>
                     <div className="p-6 space-y-3 flex-1 flex flex-col justify-between">
                       <div>
@@ -537,11 +528,8 @@ export default function App() {
 
                   {/* Card 2 */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                    <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center p-8 relative select-none">
-                      <svg className="h-16 w-16 text-slate-350" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a9 9 0 0114.14 0M1.34 6.81a13.9 13.9 0 0119.32 0" />
-                      </svg>
-                      <span className="absolute bottom-2 right-2 text-[9px] font-mono text-slate-400 bg-slate-50 border px-1.5 py-0.5 rounded">3D Point Cloud</span>
+                    <div className="w-full aspect-video relative overflow-hidden border-b border-slate-200 select-none">
+                      <img src={telecomTowers} className="absolute inset-0 w-full h-full object-cover" alt="Telecommunications towers" />
                     </div>
                     <div className="p-6 space-y-3 flex-1 flex flex-col justify-between">
                       <div>
@@ -558,11 +546,8 @@ export default function App() {
 
                   {/* Card 3 */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                    <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center p-8 relative select-none">
-                      <svg className="h-16 w-16 text-slate-350" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                      </svg>
-                      <span className="absolute bottom-2 right-2 text-[9px] font-mono text-slate-400 bg-slate-50 border px-1.5 py-0.5 rounded">3D Point Cloud</span>
+                    <div className="w-full aspect-video relative overflow-hidden border-b border-slate-200 select-none">
+                      <img src={droneCommercialRoof} className="absolute inset-0 w-full h-full object-cover" alt="Commercial building roofs" />
                     </div>
                     <div className="p-6 space-y-3 flex-1 flex flex-col justify-between">
                       <div>
@@ -579,11 +564,8 @@ export default function App() {
 
                   {/* Card 4 */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                    <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center p-8 relative select-none">
-                      <svg className="h-16 w-16 text-slate-350" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      <span className="absolute bottom-2 right-2 text-[9px] font-mono text-slate-400 bg-slate-50 border px-1.5 py-0.5 rounded">3D Point Cloud</span>
+                    <div className="w-full aspect-video relative overflow-hidden border-b border-slate-200 select-none">
+                      <img src={dronesElectricitySector} className="absolute inset-0 w-full h-full object-cover" alt="Electrical substations" />
                     </div>
                     <div className="p-6 space-y-3 flex-1 flex flex-col justify-between">
                       <div>
@@ -639,7 +621,7 @@ export default function App() {
                   {/* Blog Card 1 */}
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col bg-[#f8fafc]/40">
                     <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center relative select-none">
-                      <span className="text-slate-300 font-bold text-xs uppercase tracking-widest">Guide Thumbnail</span>
+                      <img src={droneBridgeInspectionFeatured} className="w-full h-full object-cover" alt="Guide Thumbnail" />
                     </div>
                     <div className="p-6 space-y-3">
                       <div className="text-[10px] font-bold text-[#2563eb] uppercase tracking-wider">Bridge Inspections</div>
@@ -656,7 +638,7 @@ export default function App() {
                   {/* Blog Card 2 */}
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col bg-[#f8fafc]/40">
                     <div className="aspect-video bg-slate-100 border-b border-slate-200 flex items-center justify-center relative select-none">
-                      <span className="text-slate-300 font-bold text-xs uppercase tracking-widest">Case Study Thumbnail</span>
+                      <img src={screenshotCaseStudy} className="w-full h-full object-cover" alt="Case Study Thumbnail" />
                     </div>
                     <div className="p-6 space-y-3">
                       <div className="text-[10px] font-bold text-[#2563eb] uppercase tracking-wider">Cell Towers</div>
@@ -683,7 +665,7 @@ export default function App() {
                       <svg className="h-6 w-6 text-[#2563eb] fill-current" viewBox="0 0 24 24">
                         <path d="M2 4h18l-3 6H2V4zm3 8h17l-3 6H5v-6z"/>
                       </svg>
-                      <span className="font-display font-bold text-slate-800 text-sm">AeroMap Suite</span>
+                      <span className="font-display font-bold text-slate-800 text-sm">AeroMap </span>
                     </div>
                     <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
                       Autonomous flight software mapping complex physical sites with high-fidelity photogrammetry adjustments.
