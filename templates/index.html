@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° Drone Video to 3D Reconstruction Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Three.js + OrbitControls + OBJLoader + PLYLoader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚁 360° Drone Video 3D World Reconstruction Engine</h1>
+            <p>Real-data photogrammetry, camera pose estimation, anisotropic Gaussian Splatting & 3D scene generation.</p>
+        </header>
+
+        <!-- Testing Panel -->
+        <div class="panel">
+            <!-- Upload Box -->
+            <div class="dropzone" id="dropzone">
+                <input type="file" id="file-input" accept="video/mp4,video/mov,video/avi,video/webm,video/mkv,video/*" style="display:none;">
+                <div class="drop-icon">🎥</div>
+                <div class="drop-title">Upload 360° Drone Video</div>
+                <div class="drop-subtitle">Drag & drop your video file here or <span class="highlight">browse</span></div>
+                <div class="file-hint">Supports MP4, MOV, WEBM, AVI, INSV (Spherical / Equirectangular)</div>
+            </div>
+
+            <div id="video-selected-info" class="selected-badge" style="display:none;">
+                Selected: <strong id="video-filename-txt">drone_flight.mp4</strong>
+            </div>
+
+            <!-- Demo video shortcut button -->
+            <div class="action-row">
+                <button class="btn btn-secondary" id="btn-use-sample-video">🎬 Use Sample Video (inp/input.mp4)</button>
+                <button class="btn btn-primary" id="btn-start" disabled>🚀 Start Reconstruction</button>
+            </div>
+
+            <!-- Processing Status & Progress Bar -->
+            <div class="status-box" id="status-box" style="display:none;">
+                <div class="status-header">
+                    <span class="status-title" id="status-title">PROCESSING...</span>
+                    <span class="status-pct" id="status-pct">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+                <div class="status-log" id="status-log">Initializing pipeline...</div>
+            </div>
+
+            <!-- Results & Download Links -->
+            <div class="results-box" id="results-box" style="display:none;">
+                <div class="results-title">✅ 3D World Reconstructed Successfully!</div>
+                <div class="telemetry-info" id="telemetry-info">Total 3D Points: 0 | Orientation: +Y Up, Ground at Y=0</div>
+                <div class="download-grid">
+                    <a class="btn-dl" id="dl-splat" href="#" download>⬇ Download .SPLAT (WebGL 3DGS)</a>
+                    <a class="btn-dl" id="dl-ply" href="#" download>⬇ Download .PLY (3D Gaussian Splats)</a>
+                    <a class="btn-dl" id="dl-obj" href="#" download>⬇ Download .OBJ (Clean 3D Model)</a>
+                    <a class="btn-dl" id="dl-scene" href="#" download>⬇ Download scene.json (Metadata)</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive 3D Preview Viewport -->
+        <div class="viewport-card">
+            <div class="viewport-header">
+                <span>3D Viewport Preview (+Y Up, Gravity Aligned)</span>
+                <div class="viewport-controls">
+                    <button class="btn-ctrl active" id="btn-view-splats">✨ 3D Gaussians</button>
+                    <button class="btn-ctrl" id="btn-view-pts">🔘 Points</button>
+                    <button class="btn-ctrl" id="btn-view-solid">🎨 Solid Mesh</button>
+                    <button class="btn-ctrl" id="btn-view-wire">🕸 Wireframe</button>
+                    <button class="btn-ctrl" id="btn-reset-view">🔄 Reset Camera</button>
+                </div>
+            </div>
+            <div id="canvas-container"></div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

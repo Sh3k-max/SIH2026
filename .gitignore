@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.env.*
+venv/
+.venv/
+env/
+ENV/
+
+# Large binaries and videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.ply
+*.splat
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime, upload and output directories
+output/
+uploads/
+inp/
+scratch/
+
+# External third-party / heavy repositories
+dust3r/
+
+# Frontend builds and dependencies
+node_modules/
+dist/
+dist-ssr/
+ui/node_modules/
+ui/dist/
+ui/dist-ssr/
+ui/projects/
+ui/scratch/
+ui/south-building/
+ui/hmm/
+
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
