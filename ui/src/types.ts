@@ -75,10 +75,13 @@ export interface AvailableModel {
 }
 
 export const AVAILABLE_3D_MODELS: AvailableModel[] = [
+  { id: 'video_3d_world_semantic_completed', filename: 'video_3d_world_semantic_completed.obj', name: '★ Semantic 3D Completed (Progressive AI)', category: 'Semantic Completion', description: 'Progressive local completion with multi-factor confidence, video grounding & disaster resilience', type: 'points' },
+  { id: 'video_3d_world_agent_infilled', filename: 'video_3d_world_agent_infilled.obj', name: '★ Video-Aware Agent Infilled Solid World (676k pts)', category: 'Multimodal AI Agent', description: 'Cross-referenced with ALL video frames; continuous traversable ground infill, solid roof capping & sealed rear facades', type: 'points' },
+  { id: 'genpc_completed_model', filename: 'genpc_completed_model.obj', name: '★ GenPC Inpainted 3D World (Zero-Shot)', category: 'GenPC AI Completed', description: 'Zero-shot generative prior completion with 50,450 missing ray pixels repaired', type: 'points' },
   { id: 'dust3r_mode1l', filename: 'dust3r_mode1l.obj', name: 'VGGT + DUSt3R Hybrid Point Cloud', category: 'Dense Point Cloud', description: 'LiDAR/Photogrammetry hybrid 3D point matrix with true RGB', type: 'points' },
   { id: 'dust3r_model', filename: 'dust3r_model.obj', name: 'DUSt3R Dense Surface Reconstruction', category: 'High-Density Mesh', description: 'Deep multi-view stereo geometric point & triangle mesh', type: 'mesh' },
   { id: 'cinematic_world', filename: 'cinematic_world.obj', name: 'Cinematic Environment 3D World', category: 'Large-Scale Mesh', description: 'Full aerial panoramic 3D textured landscape reconstruction', type: 'mesh' },
-  { id: 'video_3d_world', filename: 'video_3d_world.obj', name: 'Video Keyframe Photogrammetry', category: 'Sequential Mesh', description: 'Dense SLAM trajectory fused 3D structural model', type: 'mesh' },
+  { id: 'video_3d_world', filename: 'video_3d_world.obj', name: 'Solid Grounded World Model', category: 'Sequential Mesh', description: 'Fully enclosed 3D world with continuous ground terrain & solid structures', type: 'points' },
   { id: 'dust3r_clean', filename: 'dust3r_clean.obj', name: 'DUSt3R Clean & Filtered Surface', category: 'Optimized Mesh', description: 'Outlier-filtered high-fidelity structural surface', type: 'mesh' },
   { id: 'large_survey', filename: 'large_survey.obj', name: 'Large Aerial Survey Reconstruction', category: 'Aerial Terrain', description: 'Wide-area orthophoto-textured surface mesh', type: 'mesh' },
   { id: 'points3D', filename: 'points3D.obj', name: 'Sparse Triangulated Points (points3D)', category: 'Seed Points', description: 'Bundle adjusted sparse tie-point cloud', type: 'points' },
@@ -157,7 +160,7 @@ export const MOCK_PROJECTS: Project[] = [
   {
     id: 'proj-1',
     name: 'Infrastructure & Harbor 3D Survey',
-    path: 'C:/Surveys/AeroMap_Harbor_Flight_01',
+    path: 'C:/Surveys/Aevora_Harbor_Flight_01',
     type: 'new',
     imageCount: MOCK_CAMERAS.length,
     images: MOCK_CAMERAS.map(c => c.filename),

@@ -22,9 +22,10 @@ from pipeline.georeferencing import Georeferencer
 from pipeline.pointcloud import PointCloudProcessor
 from pipeline.mesh import SurfaceReconstructor
 
-# Import VGGT and DUSt3R wrappers
+# Import VGGT, DUSt3R and GenPC wrappers
 from models.vggt_engine import VGGTReconstructor, HAS_REAL_VGGT
 from models.dust3r_engine import DUSt3REngine, HAS_REAL_DUST3R
+from models.genpc_engine import GenPCEngine, HAS_REAL_GENPC
 
 app = FastAPI(title="AeroMap AI Inference Service")
 
@@ -54,6 +55,7 @@ def get_system_status():
     # We check if the wrappers are ready (cloned and importable)
     vggt_status = "ready" if HAS_REAL_VGGT else "missing"
     dust3r_status = "ready" if HAS_REAL_DUST3R else "missing"
+    genpc_status = "ready" if HAS_REAL_GENPC else "missing"
     
     if gpu_available:
         gpu_name = torch.cuda.get_device_name(0)
@@ -67,7 +69,8 @@ def get_system_status():
             },
             "pytorch": pytorch_version,
             "vggt": vggt_status,
-            "dust3r": dust3r_status
+            "dust3r": dust3r_status,
+            "genpc": genpc_status
         }
     else:
         # Return status as "degraded" (CPU mode) but report engines as ready/missing based on software installation
@@ -80,6 +83,7 @@ def get_system_status():
             "pytorch": pytorch_version,
             "vggt": vggt_status,
             "dust3r": dust3r_status,
+            "genpc": genpc_status,
             "error": "CUDA is unavailable. PyTorch is running on CPU-only fallback."
         }
 

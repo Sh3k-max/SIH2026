@@ -12,6 +12,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true
       },
+      '/models': {
+        target: 'http://localhost:5001',
+        changeOrigin: true
+      },
       '/output': {
         target: 'http://localhost:5001',
         changeOrigin: true

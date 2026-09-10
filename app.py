@@ -30,6 +30,8 @@ if ENGINE_DIR not in sys.path:
     sys.path.insert(0, ENGINE_DIR)
 
 from pipeline import ReconstructionPipeline
+from genpc_engine import GenPCCompletionEngine
+from video_aware_agent import VideoAware3DWorldAgent
 
 app = FastAPI(title="360 Drone Video 3D World Reconstruction Engine")
 
@@ -238,7 +240,115 @@ async def get_coverage(job_id: str):
     coverage_file = os.path.join(OUTPUT_DIR, f"job_{job_id}", "coverage", "coverage.json")
     if os.path.exists(coverage_file):
         return FileResponse(coverage_file, media_type="application/json")
-    return JSONResponse({"error": "Coverage data not found"}, status_code=404)
+@app.post("/api/genpc/complete")
+async def api_genpc_complete(
+    model_name: str = Form("dust3r_mode1l.obj"),
+    inpaint_ratio: float = Form(0.35)
+):
+    """POST /api/genpc/complete: Executes GenPC zero-shot completion & missing pixel generation on any 3D model."""
+    try:
+        candidate_paths = [
+            os.path.join(OUTPUT_DIR, model_name),
+            os.path.join(BASE_DIR, "ui", "public", "models", model_name),
+            os.path.join(BASE_DIR, model_name)
+        ]
+        target_obj = next((p for p in candidate_paths if os.path.exists(p)), None)
+        if not target_obj:
+            return JSONResponse({"error": f"Model {model_name} not found"}, status_code=404)
+
+        base_stem = os.path.splitext(os.path.basename(model_name))[0]
+        out_name = f"{base_stem}_genpc.obj"
+        out_path = os.path.join(OUTPUT_DIR, out_name)
+
+        result = GenPCCompletionEngine.complete_obj_file(
+            input_obj_path=target_obj,
+            output_obj_path=out_path,
+            inpaint_ratio=inpaint_ratio
+        )
+
+        ui_public_model = os.path.join(BASE_DIR, "ui", "public", "models", out_name)
+        try:
+            shutil.copyfile(out_path, ui_public_model)
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "status": "success",
+            "model_name": out_name,
+            "url": f"/models/{out_name}",
+            "captured_count": result["captured_count"],
+            "generated_count": result["generated_count"],
+            "total_count": result["total_count"],
+            "missing_pixels_inpainted": result["missing_pixels_inpainted"],
+            "captured_pct": result["captured_pct"],
+            "generated_pct": result["generated_pct"],
+            "avg_confidence": result["avg_confidence"]
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/agent/complete")
+async def api_agent_complete(
+    model_name: str = Form("video_3d_world.obj"),
+    video_source: Optional[str] = Form(None)
+):
+    """POST /api/agent/complete: Autonomous Video-Aware Multimodal 3D World Completion Agent."""
+    try:
+        candidate_model_paths = [
+            os.path.join(OUTPUT_DIR, model_name),
+            os.path.join(BASE_DIR, "ui", "public", "models", model_name),
+            os.path.join(BASE_DIR, model_name)
+        ]
+        target_obj = next((p for p in candidate_model_paths if os.path.exists(p)), None)
+        if not target_obj:
+            return JSONResponse({"error": f"Model {model_name} not found"}, status_code=404)
+
+        # Detect video keyframes or video file
+        candidate_kf_paths = [
+            video_source if video_source and os.path.exists(video_source) else None,
+            os.path.join(OUTPUT_DIR, "video_keyframes"),
+            os.path.join(OUTPUT_DIR, "keyframes_360"),
+            os.path.join(BASE_DIR, "uploads")
+        ]
+        target_kf = next((p for p in candidate_kf_paths if p and os.path.exists(p)), None)
+        if not target_kf:
+            target_kf = os.path.join(OUTPUT_DIR, "video_keyframes")
+
+        base_stem = os.path.splitext(os.path.basename(model_name))[0]
+        out_name = f"{base_stem}_agent_infilled.obj"
+        out_path = os.path.join(OUTPUT_DIR, out_name)
+
+        agent = VideoAware3DWorldAgent(verbose=False)
+        result = agent.run_agentic_pipeline(
+            video_path_or_dir=target_kf,
+            model_path=target_obj,
+            output_path=out_path
+        )
+
+        ui_public_model = os.path.join(BASE_DIR, "ui", "public", "models", out_name)
+        try:
+            shutil.copyfile(out_path, ui_public_model)
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "status": "success",
+            "model_name": out_name,
+            "url": f"/models/{out_name}",
+            "captured_count": result["captured_count"],
+            "generated_count": result["generated_count"],
+            "total_count": result["total_count"],
+            "video_recovered_count": result["video_recovered_count"],
+            "generative_prior_count": result["generative_prior_count"],
+            "pass_rate": result["pass_rate"],
+            "avg_confidence": result["avg_confidence"],
+            "trace_logs": result["trace_logs"],
+            "elapsed_seconds": result["elapsed_seconds"]
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 
 if __name__ == "__main__":

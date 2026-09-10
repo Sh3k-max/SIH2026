@@ -30,6 +30,7 @@ scratch/
 
 # External third-party / heavy repositories
 dust3r/
+vggt_src/
 
 # Frontend builds and dependencies
 node_modules/
@@ -42,6 +43,24 @@ ui/projects/
 ui/scratch/
 ui/south-building/
 ui/hmm/
+
+# Temporary / throwaway generated models
+ui/public/models/aa*.obj
+ui/public/models/achacho*.obj
+ui/public/models/adnldn*.obj
+ui/public/models/adsffgdsss.obj
+ui/public/models/ahahahaha*.obj
+ui/public/models/archive.obj
+ui/public/models/ddd.obj
+ui/public/models/downloads.obj
+ui/public/models/fdzhdfhf.obj
+ui/public/models/fjnnf.obj
+ui/public/models/hello*.obj
+ui/public/models/mmdm.obj
+ui/public/models/test*.obj
+ui/public/models/*_genpc_genpc*.obj
+!ui/public/models/test_flight_genpc.obj
+!ui/public/models/test_vite_proxy.obj
 
 
 # Logs

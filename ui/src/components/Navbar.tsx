@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="flex items-center gap-8 h-full">
         <div className="font-display font-extrabold text-xl text-[#2563eb] flex items-center tracking-tight">
           <Layers className="mr-2 text-[#2563eb] animate-pulse" size={22} />
-          AeroMap 3D
+          Aevora 3D
         </div>
 
         <nav className="hidden md:flex h-full items-center text-sm font-medium">
@@ -85,17 +85,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="absolute left-0 top-14 w-48 rounded-lg bg-white border border-[#E2E8F0] shadow-xl py-1.5 z-40 text-slate-700">
                   <button
                     onClick={() => {
-                      toast.info('AeroMap 3D Mapping & Photogrammetry Suite — v1.0.0 (Release Build)');
+                      toast.info('Aevora 3D Mapping & Photogrammetry Suite — v1.0.0 (Release Build)');
                       setHelpMenuOpen(false);
                     }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700 hover:text-[#0F172A]"
                   >
                     <Cpu size={14} className="text-[#2563eb]" />
-                    <span>About AeroMap 3D</span>
+                    <span>About Aevora 3D</span>
                   </button>
                   <button
                     onClick={() => {
-                      toast.info('Opening AeroMap 3D documentation & tutorials...');
+                      toast.info('Opening Aevora 3D documentation & tutorials...');
                       setHelpMenuOpen(false);
                     }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700 hover:text-[#0F172A]"

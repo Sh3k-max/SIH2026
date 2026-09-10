@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AeroMap Real-Time Streaming Keyframe Selection & Incremental 3D Pipeline
+Aevora Real-Time Streaming Keyframe Selection & Incremental 3D Pipeline
 Designed for Single-Pass Drone Flight 3D Mapping.
 
 Features:
@@ -276,7 +276,7 @@ def process_drone_sequence(
     )
 
     print("=================================================================")
-    print("[*] AeroMap Drone Single-Pass Streaming Keyframe Pipeline")
+    print("[*] Aevora Drone Single-Pass Streaming Keyframe Pipeline")
     print("=================================================================")
     print(f"[*] Input Source       : {input_source}")
     print(f"[*] Keyframe Output Dir: {output_path}")
@@ -358,7 +358,7 @@ def process_drone_sequence(
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="AeroMap Streaming Keyframe Selector for Drone Flights")
+    parser = argparse.ArgumentParser(description="Aevora Streaming Keyframe Selector for Drone Flights")
     parser.add_argument("--input", type=str, default="./input_images", help="Path to video file or photo sequence directory")
     parser.add_argument("--output", type=str, default="./streaming_keyframes", help="Output directory for selected keyframes")
     parser.add_argument("--rate", type=int, default=1, help="Downsample rate (e.g. 1 for all photos, 4 for 30fps->7.5fps video)")

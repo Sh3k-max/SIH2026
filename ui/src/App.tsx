@@ -51,12 +51,51 @@ export default function App() {
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const [projectList, setProjectList] = useState<Project[]>(MOCK_PROJECTS);
 
+  // Processing job state
+  const [processingJobId, setProcessingJobId] = useState<string | null>(null);
+  const [processingProgress, setProcessingProgress] = useState<number>(0);
+  const [processingLogs, setProcessingLogs] = useState<string[]>([]);
+  const [processingStatus, setProcessingStatus] = useState<string>('running');
+
   const isWorkspaceView = ['dashboard', 'map', 'raycloud', 'mesh', 'compare', 'volumes', 'processing'].includes(currentView);
 
   // Ensure dark class is removed on mount
   useEffect(() => {
     window.document.documentElement.classList.remove('dark');
   }, []);
+
+  // Poll job progress when in processing view
+  useEffect(() => {
+    if (!processingJobId || currentView !== 'processing') return;
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        await new Promise(r => setTimeout(r, 900));
+        if (cancelled) break;
+        try {
+          const res = await fetch(`/api/jobs/${processingJobId}/status`);
+          if (!res.ok) continue;
+          const job = await res.json();
+          if (cancelled) break;
+          if (typeof job.progress === 'number') setProcessingProgress(job.progress);
+          if (job.logs?.length > 0) setProcessingLogs(job.logs.slice(-20));
+          setProcessingStatus(job.status);
+          if (job.status === 'complete') {
+            toast.success('3D Reconstruction complete! Loading your model...');
+            setProcessingJobId(null);
+            setCurrentView('mesh');
+            break;
+          } else if (job.status === 'error') {
+            toast.error('Reconstruction failed: ' + (job.logs?.slice(-1)[0] || 'Unknown error'));
+            setProcessingJobId(null);
+            break;
+          }
+        } catch { /* network blip, retry */ }
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [processingJobId, currentView]);
 
   const handleOpenProjectSelect = () => {
     const pNames = projectList.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
@@ -89,6 +128,8 @@ export default function App() {
     unit: string;
     cameras?: CameraTelemetry[];
     datasetName?: string;
+    jobId?: string;
+    isProcessing?: boolean;
   }) => {
     const cleanName = projectData.datasetName || projectData.name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
     const newProj: Project = {
@@ -103,15 +144,25 @@ export default function App() {
       unit: projectData.unit,
       cameras: projectData.cameras,
       datasetName: cleanName,
-      isProcessed: true,
+      isProcessed: !projectData.isProcessing,
       createdAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
     };
 
     setProjectList([newProj, ...projectList]);
     setActiveProject(newProj);
     setIsWizardOpen(false);
-    setCurrentView('mesh');
-    toast.success(`Project "${newProj.name}" created and loaded into workspace!`);
+
+    if (projectData.isProcessing && projectData.jobId) {
+      setProcessingJobId(projectData.jobId);
+      setProcessingProgress(12);
+      setProcessingLogs(['[INFO] Reconstruction job started...']);
+      setProcessingStatus('running');
+      setCurrentView('processing');
+      toast.info(`Reconstruction started for "${newProj.name}"`);
+    } else {
+      setCurrentView('mesh');
+      toast.success(`Project "${newProj.name}" created and loaded into workspace!`);
+    }
   };
 
   const handleProcessingComplete = (jobId?: string) => {
@@ -206,11 +257,11 @@ export default function App() {
 
                     {/* Nav Links */}
                     <nav className="hidden xl:flex items-center gap-5 lg:gap-6 text-[12px] font-semibold text-slate-700 hover:text-slate-900 transition-colors uppercase tracking-wider">
-                      {['AeroMap', 'Site Security', 'Inspection', 'Mapping', 'National Security', 'Industries', 'Products', 'Resources'].map((item) => (
+                      {['Aevora', 'Site Security', 'Inspection', 'Mapping', 'National Security', 'Industries', 'Products', 'Resources'].map((item) => (
                         <button
                           key={item}
                           onClick={() => {
-                            if (['AeroMap', 'Site Security', 'Inspection', 'Mapping', 'National Security'].includes(item)) {
+                            if (['Aevora', 'Site Security', 'Inspection', 'Mapping', 'National Security'].includes(item)) {
                               const el = document.getElementById('solutions-alternating-section');
                               el?.scrollIntoView({ behavior: 'smooth' });
                             } else if (item === 'Industries' || item === 'Products' || item === 'Resources') {
@@ -284,7 +335,7 @@ export default function App() {
                 {/* Hero Main Content */}
                 <div className="relative z-20 flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 text-white max-w-4xl pt-16">
                   <h1 className="font-display font-extrabold text-4xl sm:text-6xl md:text-7.5xl tracking-tight leading-[1.08] text-white animate-fade-in-scale">
-                    Point at the asset.<br />AeroMap does the rest.
+                    Point at the asset.<br />Aevora does the rest.
                   </h1>
                   <p className="text-sm sm:text-base md:text-lg font-medium text-slate-200 mt-6 max-w-xl leading-relaxed">
                     Autonomous drone inspection of complex structures, buildings, infrastructure, and stockpiles.
@@ -294,14 +345,14 @@ export default function App() {
                       onClick={() => setCurrentView('mesh')}
                       className="bg-[#2563eb] hover:bg-blue-600 text-white font-bold text-xs px-6 py-3.5 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg group btn-scale"
                     >
-                      <span>🚀 Launch 3D Mesh Viewer</span>
+                      <span>Launch 3D Mesh Viewer</span>
                       <ChevronRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                     </button>
                     <button 
                       onClick={() => setIsWizardOpen(true)}
                       className="bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/40 text-white font-bold text-xs px-6 py-3.5 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg btn-scale"
                     >
-                      <span>➕ New Project (Upload Photos)</span>
+                      <span>New Project (Upload Photos)</span>
                     </button>
                   </div>
                 </div>
@@ -314,7 +365,7 @@ export default function App() {
               <div className="w-full bg-[#f1f5f9]/60 border-y border-slate-200 py-16 px-6 sm:px-12 md:px-24 text-center flex justify-center shrink-0">
                 <div className="max-w-4xl">
                   <p className="text-base sm:text-lg md:text-xl font-semibold text-slate-800 leading-relaxed font-display">
-                    AeroMap 3D Scan is a first-of-its-kind adaptive scanning software that automates data capture of complex structures. It generates complete, high-fidelity datasets with 100% coverage, in a fraction of the time, with minimal training.
+                    Aevora 3D Scan is a first-of-its-kind adaptive scanning software that automates data capture of complex structures. It generates complete, high-fidelity datasets with 100% coverage, in a fraction of the time, with minimal training.
                   </p>
                 </div>
               </div>
@@ -365,7 +416,7 @@ export default function App() {
                     <div className="space-y-4">
                       <h3 className="font-display font-extrabold text-2xl text-slate-900">Mapping under overhangs</h3>
                       <p className="text-slate-500 text-sm leading-relaxed">
-                        Unlike traditional nadir mapping, AeroMap 3D Scan inspects beneath ceilings, solar panel frames, and bridge decks by tilting the camera upwards.
+                        Unlike traditional nadir mapping, Aevora 3D Scan inspects beneath ceilings, solar panel frames, and bridge decks by tilting the camera upwards.
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200/80 overflow-hidden shadow-lg bg-slate-100 aspect-video flex items-center justify-center relative group">
@@ -392,7 +443,7 @@ export default function App() {
                 <div className="w-full max-w-4xl bg-slate-50/70 backdrop-blur-sm border border-slate-200 rounded-3xl p-8 md:p-12 shadow-md space-y-6 mt-12 text-center">
                   <span className="text-[#2563eb] text-5xl font-serif block leading-none select-none">“</span>
                   <p className="text-slate-700 italic text-base sm:text-lg md:text-xl font-medium leading-relaxed font-display max-w-3xl mx-auto">
-                    AeroMap 3D Scan has completely transformed our inspection workflow. We've cut survey compilation times by 75% while achieving 100% scan coverage on critical infrastructure.
+                    Aevora 3D Scan has completely transformed our inspection workflow. We've cut survey compilation times by 75% while achieving 100% scan coverage on critical infrastructure.
                   </p>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Director of Infrastructure Inspections, National Power Grid
@@ -436,7 +487,7 @@ export default function App() {
                     </span>
                     <h3 className="font-display font-bold text-base text-slate-800">Capture Data</h3>
                     <p className="text-xs text-slate-500 leading-relaxed flex-1">
-                      AeroMap's adaptive flight engine generates optimal capture overlap plans and pilots the drone autonomously.
+                      Aevora's adaptive flight engine generates optimal capture overlap plans and pilots the drone autonomously.
                     </p>
                     <div className="w-full aspect-video relative overflow-hidden rounded-xl border border-slate-100 mt-4 select-none">
                       <img src={captureDataImg} className="absolute inset-0 w-full h-full object-cover" alt="Capture Data" />
@@ -467,7 +518,7 @@ export default function App() {
                     Export ready for photogrammetry.
                   </h2>
                   <p className="text-slate-500 text-xs leading-relaxed max-w-xl">
-                    AeroMap 3D Scan outputs geo-referenced image datasets that are 100% compatible with major engines like Pix4D, Bentley ContextCapture, RealityCapture, and our internal AeroMap engine.
+                    Aevora 3D Scan outputs geo-referenced image datasets that are 100% compatible with major engines like Pix4D, Bentley ContextCapture, RealityCapture, and our internal Aevora engine.
                   </p>
                 </div>
 
@@ -485,7 +536,7 @@ export default function App() {
                     <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
                     <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
                     <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-                    <span className="text-[9.5px] font-mono text-slate-400 ml-2">AeroMap 3D Survey Workspace Panel</span>
+                    <span className="text-[9.5px] font-mono text-slate-400 ml-2">Aevora 3D Survey Workspace Panel</span>
                   </div>
                   
                   {/* Map mockup illustration replaced by video */}
@@ -519,11 +570,11 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Section 4: "See what AeroMap Autonomy matches" */}
+              {/* Section 4: "See what Aevora Autonomy matches" */}
               <div className="w-full bg-[#f8fafc] py-24 px-6 sm:px-12 md:px-24 flex flex-col items-center gap-16 relative z-20 font-sans border-b border-slate-200">
                 <div className="text-center max-w-2xl">
                   <h2 className="font-display font-extrabold text-3xl text-slate-900 tracking-tight leading-tight">
-                    See what AeroMap Autonomy matches
+                    See what Aevora Autonomy matches
                   </h2>
                 </div>
 
@@ -621,7 +672,7 @@ export default function App() {
                     }}
                     className="bg-[#2563eb] hover:bg-blue-600 text-white font-bold text-xs px-8 py-4 rounded-xl transition cursor-pointer shadow-lg btn-scale"
                   >
-                    Try AeroMap Now
+                    Try Aevora Now
                   </button>
                 </div>
               </div>
@@ -632,7 +683,7 @@ export default function App() {
                   <h2 className="font-display font-extrabold text-2xl text-slate-900 tracking-tight leading-tight">
                     Learn more about 3D Scan
                   </h2>
-                  <button onClick={() => toast.info('Navigating to AeroMap blog stories...')} className="text-xs font-bold text-[#2563eb] hover:underline">
+                  <button onClick={() => toast.info('Navigating to Aevora blog stories...')} className="text-xs font-bold text-[#2563eb] hover:underline">
                     View all stories →
                   </button>
                 </div>
@@ -666,7 +717,7 @@ export default function App() {
                       <div className="text-[10px] font-bold text-[#2563eb] uppercase tracking-wider">Cell Towers</div>
                       <h3 className="font-display font-bold text-base text-slate-800 leading-snug">Setting up adaptive photogrammetry overlaps for complex towers</h3>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        Learn how modern telecom giants utilize AeroMap 3D Scan to generate full structural reports with 100% detail coverage.
+                        Learn how modern telecom giants utilize Aevora 3D Scan to generate full structural reports with 100% detail coverage.
                       </p>
                       <button onClick={() => toast.info('Opening telecom case study...')} className="text-xs font-bold text-slate-800 hover:text-black hover:underline pt-2 block">
                         Read post →
@@ -687,14 +738,14 @@ export default function App() {
                       <svg className="h-6 w-6 text-[#2563eb] fill-current" viewBox="0 0 24 24">
                         <path d="M2 4h18l-3 6H2V4zm3 8h17l-3 6H5v-6z"/>
                       </svg>
-                      <span className="font-display font-bold text-slate-800 text-sm">AeroMap </span>
+                      <span className="font-display font-bold text-slate-800 text-sm">Aevora </span>
                     </div>
                     <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
                       Autonomous flight software mapping complex physical sites with high-fidelity photogrammetry adjustments.
                     </p>
                     
                     {/* Newsletter mock */}
-                    <form onSubmit={(e) => { e.preventDefault(); toast.success('Subscribed to AeroMap newsletter successfully!'); }} className="flex gap-2 max-w-xs pt-2">
+                    <form onSubmit={(e) => { e.preventDefault(); toast.success('Subscribed to Aevora newsletter successfully!'); }} className="flex gap-2 max-w-xs pt-2">
                       <input 
                         type="email" 
                         required 
@@ -710,7 +761,7 @@ export default function App() {
                   <div className="space-y-3">
                     <div className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Product</div>
                     <ul className="space-y-2 text-[11px]">
-                      <li><button onClick={() => toast.info('Redirecting to AeroMap 3D Scan...')} className="hover:text-slate-850">AeroMap 3D Scan</button></li>
+                      <li><button onClick={() => toast.info('Redirecting to Aevora 3D Scan...')} className="hover:text-slate-850">Aevora 3D Scan</button></li>
                       <li><button onClick={() => toast.info('Redirecting to Flight Controller...')} className="hover:text-slate-850">Flight Controller</button></li>
                       <li><button onClick={() => toast.info('Redirecting to API Integrations...')} className="hover:text-slate-850">API Integrations</button></li>
                     </ul>
@@ -743,7 +794,7 @@ export default function App() {
                     <button onClick={() => toast.info('Licenses info')} className="hover:text-slate-800">Licenses</button>
                   </div>
                   <div>
-                    © 2026 AeroMap Robotics. All rights reserved.
+                    © 2026 Aevora Robotics. All rights reserved.
                   </div>
                 </div>
               </footer>
@@ -783,7 +834,7 @@ export default function App() {
                           type="button"
                           onClick={() => {
                             setIsLoggedIn(true);
-                            setCurrentUser({ email: 'pilot@aeromap.ai', name: 'Pilot Operator' });
+                            setCurrentUser({ email: 'pilot@aevora.ai', name: 'Pilot Operator' });
                             setCurrentView('dashboard');
                             toast.success(`${social} login authenticated! Welcome back.`);
                           }}
@@ -851,11 +902,11 @@ export default function App() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       const formData = new FormData(e.currentTarget);
-                      const email = formData.get('email') as string || 'pilot@aeromap.ai';
+                      const email = formData.get('email') as string || 'pilot@aevora.ai';
                       setIsLoggedIn(true);
                       setCurrentUser({ email, name: email.split('@')[0] || 'Pilot Operator' });
                       setCurrentView('dashboard');
-                      toast.success('Logged in successfully! Welcome to AeroMap Workspace.');
+                      toast.success('Logged in successfully! Welcome to Aevora Workspace.');
                     }}
                     className="w-full max-w-[320px] flex flex-col gap-4 text-center font-sans"
                   >
@@ -869,7 +920,7 @@ export default function App() {
                           type="button"
                           onClick={() => {
                             setIsLoggedIn(true);
-                            setCurrentUser({ email: 'pilot@aeromap.ai', name: 'Pilot Operator' });
+                            setCurrentUser({ email: 'pilot@aevora.ai', name: 'Pilot Operator' });
                             setCurrentView('dashboard');
                             toast.success(`${social} login authenticated! Welcome back.`);
                           }}
@@ -885,7 +936,7 @@ export default function App() {
                     <input
                       name="email"
                       type="email"
-                      defaultValue="pilot@aeromap.ai"
+                      defaultValue="pilot@aevora.ai"
                       required
                       placeholder="Enter E-mail"
                       className="w-full bg-[#f1f5f9] border-none px-4 py-2.5 rounded-lg text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2563eb]"
@@ -939,7 +990,7 @@ export default function App() {
                     
                     {/* Left overlay panel (Sign In trigger button) */}
                     <div className="auth-overlay-panel auth-overlay-left flex flex-col items-center justify-center text-center px-10 gap-4">
-                      <h2 className="text-3xl font-display font-extrabold text-white tracking-tight leading-none">Welcome To AeroMap</h2>
+                      <h2 className="text-3xl font-display font-extrabold text-white tracking-tight leading-none">Welcome To Aevora</h2>
                       <p className="text-xs text-blue-100 max-w-[240px] leading-relaxed">
                         To keep connected with us please login with your personal info.
                       </p>
@@ -980,7 +1031,7 @@ export default function App() {
               
               <div className="text-center max-w-2xl mt-4">
                 <h1 className="font-display font-extrabold text-2xl text-slate-900 tracking-tight leading-tight uppercase">
-                  AeroMap Workspace Hub
+                  Aevora Workspace Hub
                 </h1>
                 <p className="text-slate-500 text-xs mt-2 leading-relaxed font-semibold">
                   Welcome back{currentUser ? `, ${currentUser.name}` : ''}! Configure datum projections and import drone camera geotagged images, or restore a recent survey workspace.
@@ -1105,6 +1156,7 @@ export default function App() {
             />
           )}
 
+
           {/* VIEW: DUAL 3D MODEL COMPARISON INSPECTOR */}
           {currentView === 'compare' && activeProject && (
             <ComparePanel
@@ -1121,24 +1173,101 @@ export default function App() {
             />
           )}
 
-          {/* VIEW: PROCESSING SETTINGS (simulated) */}
+          {/* VIEW: LIVE RECONSTRUCTION PROGRESS */}
           {currentView === 'processing' && activeProject && (
-            <div className="w-full h-full p-8 flex items-center justify-center bg-grid-pattern">
-              <div className="max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center shadow-lg space-y-4">
-                <Settings size={40} className="mx-auto text-indigo-550 dark:text-indigo-400 animate-spin-slow" />
-                <h3 className="font-display font-extrabold text-base text-slate-800 dark:text-white">Processing Options Portal</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Advanced block calibration settings are locked to default. Triangulations and DSM matrices use automatic local parameters.
+            <div className="w-full h-full flex flex-col items-center justify-center bg-[#060B18] relative overflow-hidden">
+              {/* Animated background grid */}
+              <div className="absolute inset-0 opacity-10"
+                style={{ backgroundImage: 'linear-gradient(rgba(37,99,235,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.3) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+
+              <div className="relative z-10 w-full max-w-2xl px-6 flex flex-col gap-6">
+                {/* Header */}
+                <div className="text-center space-y-2">
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center">
+                      <Settings size={26} className="text-blue-400 animate-spin" style={{ animationDuration: '3s' }} />
+                    </div>
+                  </div>
+                  <h2 className="font-display font-extrabold text-xl text-white tracking-wide">
+                    3D Reconstruction In Progress
+                  </h2>
+                  <p className="text-blue-300/80 text-xs font-mono">
+                    Project: <span className="text-cyan-300 font-bold">{activeProject.name}</span>
+                  </p>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-mono text-slate-400">
+                    <span>
+                      {processingStatus === 'complete' ? '✅ Complete' :
+                       processingStatus === 'error' ? '❌ Failed' :
+                       '⚙️ Processing...'}
+                    </span>
+                    <span className="text-cyan-300 font-bold">{Math.round(processingProgress)}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-800/80 rounded-full overflow-hidden border border-slate-700">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.max(3, processingProgress)}%`,
+                        background: processingStatus === 'error'
+                          ? 'linear-gradient(90deg, #ef4444, #f97316)'
+                          : 'linear-gradient(90deg, #2563eb, #06b6d4, #10b981)'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Stage indicator pills */}
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {[
+                    { label: 'Upload', threshold: 5 },
+                    { label: 'Feature Detect', threshold: 30 },
+                    { label: 'Pose Estimation', threshold: 55 },
+                    { label: 'Dense Recon', threshold: 78 },
+                    { label: 'Mesh Export', threshold: 95 },
+                  ].map(({ label, threshold }) => {
+                    const done = processingProgress >= threshold;
+                    return (
+                      <span key={label} className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                        done
+                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                          : 'bg-slate-800/60 border-slate-700 text-slate-500'
+                      }`}>
+                        {done ? '✓ ' : ''}{label}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {/* Live Log Stream */}
+                <div className="bg-slate-950/80 border border-slate-700/60 rounded-xl p-4 h-48 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-0.5 custom-scrollbar">
+                  {processingLogs.length === 0 ? (
+                    <p className="text-slate-500 italic">Waiting for pipeline output...</p>
+                  ) : (
+                    processingLogs.map((log, i) => (
+                      <p key={i} className={`${
+                        log.includes('[ERROR]') || log.includes('error') ? 'text-red-400' :
+                        log.includes('[SUCCESS]') || log.includes('SUCCESS') ? 'text-emerald-400' :
+                        log.includes('[INFO]') ? 'text-cyan-300/90' :
+                        log.includes('%') ? 'text-blue-300' :
+                        'text-slate-400'
+                      }`}>
+                        {log}
+                      </p>
+                    ))
+                  )}
+                </div>
+
+                {/* Info footer */}
+                <p className="text-center text-slate-600 text-[10px] font-mono">
+                  The 3D mesh viewer will open automatically when reconstruction completes.
                 </p>
-                <button
-                  onClick={() => setCurrentView('map')}
-                  className="px-4 py-2 bg-indigo-650 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition cursor-pointer btn-scale"
-                >
-                  Return to Flight Map
-                </button>
               </div>
             </div>
           )}
+
 
         </main>
       </div>

@@ -47,7 +47,39 @@ app.get('/api/available_point_files', (req, res) => {
 
 const activeReconstructionJobs = new Map();
 
-// 1. Single File / Batch File Chunk Upload Endpoint
+// 1. Zero-Copy Binary Stream Upload Endpoint for large videos & photos (Prevents browser OOM)
+app.post('/api/upload/stream', async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const projectName = (req.query.projectName || 'custom_project').toString();
+    const fileName = (req.query.fileName || 'upload.bin').toString();
+
+    const cleanName = projectName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+    const imagesDir = path.resolve('projects', cleanName, 'images');
+    fs.mkdirSync(imagesDir, { recursive: true });
+
+    const filePath = path.join(imagesDir, fileName);
+    const writeStream = fs.createWriteStream(filePath);
+
+    req.pipe(writeStream);
+
+    writeStream.on('finish', () => {
+      console.log(`[Stream Upload] Successfully saved: ${fileName} into projects/${cleanName}/images`);
+      return res.json({ status: 'uploaded', file: fileName, path: filePath });
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('Streaming file write error:', err);
+      return res.status(500).json({ error: err.message });
+    });
+  } catch (err) {
+    console.error('Binary stream upload error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 1b. Single File / Batch File Chunk Upload Endpoint (Fallback)
 app.post('/api/upload/file', async (req, res) => {
   try {
     const fs = await import('fs');
@@ -139,7 +171,7 @@ app.post('/api/reconstruct/start_project', async (req, res) => {
     const { spawn } = await import('child_process');
     const crypto = await import('crypto');
 
-    const { projectName = 'custom_project', localPath = '' } = req.body;
+    const { projectName = 'custom_project', localPath = '', engine = 'dust3r' } = req.body;
     const cleanName = projectName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
     const jobId = crypto.randomUUID();
 
@@ -147,11 +179,18 @@ app.post('/api/reconstruct/start_project', async (req, res) => {
     let imagesDir = path.join(targetDir, 'images');
     const outputDir = path.join(targetDir, '3d_model');
 
-    // If a valid local directory is provided on disk, use it directly
-    if (localPath && fs.existsSync(localPath)) {
-      const stats = fs.statSync(localPath);
-      if (stats.isDirectory()) {
-        imagesDir = path.resolve(localPath);
+    // If a valid local directory or file is provided on disk, use it directly
+    let candidatePath = localPath;
+    if (candidatePath && !fs.existsSync(candidatePath)) {
+      const parentCandidate = path.resolve('..', candidatePath);
+      if (fs.existsSync(parentCandidate)) {
+        candidatePath = parentCandidate;
+      }
+    }
+    if (candidatePath && fs.existsSync(candidatePath)) {
+      const stats = fs.statSync(candidatePath);
+      if (stats.isDirectory() || stats.isFile()) {
+        imagesDir = path.resolve(candidatePath);
       }
     }
 
@@ -162,29 +201,83 @@ app.post('/api/reconstruct/start_project', async (req, res) => {
       projectName: cleanName,
       status: 'running',
       progress: 5,
-      logs: [`[INFO] Initialized project ${cleanName}`, `[INFO] Input images directory: ${imagesDir}`],
+      logs: [`[INFO] Initialized project ${cleanName}`, `[INFO] Selected AI Engine: ${engine.toUpperCase()}`, `[INFO] Input images directory: ${imagesDir}`],
       datasetName: cleanName,
       outputDir
     };
     activeReconstructionJobs.set(jobId, job);
 
-    // Run async photogrammetry pipeline using hmm/main.py
+    // Run async photogrammetry pipeline using hmm/main.py or selected neural engine
     (async () => {
       try {
-        job.progress = 10;
-        job.logs.push('[Stage 1/2] Launching Python High-Precision Photogrammetry Pipeline...');
+        const genpcScript   = path.resolve('..', 'genpc_reconstruction.py');
+        const vggtScript    = path.resolve('..', 'vggt_reconstruction.py');
+        const dust3rScript  = path.resolve('..', 'dust3r_reconstruction.py');
+        const hybridScript  = path.resolve('..', 'vggt_dust3r_hybrid.py');
+        const mainScript    = path.resolve('..', 'main.py');
+        const outObj        = path.join(outputDir, 'model.obj');
+        const outHybridPfx  = outObj.replace(/\.obj$/i, '');
 
-        const mainScript = path.resolve('..', 'main.py');
-        const outObj = path.join(outputDir, 'model.obj');
+        let pyScript;
+        let pyArgs;
 
-        const pyProcess = spawn('python', [
-          mainScript,
-          '--input_dir', imagesDir,
-          '--output', outObj,
-          '--format', 'obj',
-          '--feature_type', 'SIFT',
-          '--mesh_method', 'poisson'
-        ]);
+        if (engine === 'genpc' && fs.existsSync(genpcScript)) {
+          job.logs.push('[Stage 1/2] Launching GenPC Zero-Shot Generative Prior & Inpainting Engine...');
+          pyScript = genpcScript;
+          pyArgs = [
+            genpcScript,
+            '--input', imagesDir,
+            '--output', outObj,
+            '--inpaint_ratio', '0.35'
+          ];
+        } else if (engine === 'hybrid' && fs.existsSync(hybridScript)) {
+          job.logs.push('[Stage 1/3] Launching VGGT × DUSt3R Hybrid (6GB VRAM mode: sequential loading, fp16)...');
+          pyScript = hybridScript;
+          pyArgs = [
+            hybridScript,
+            '--input',        imagesDir,
+            '--output',       outHybridPfx,
+            '--vggt_views',   '7',    // VGGT-1B fp16 @ 7 views ~2.5GB peak
+            '--dust3r_views', '10',   // DUSt3R 224px @ 10 views ~3GB peak
+            '--img_size',     '224',  // 224px = 6GB safe; 512px needs >=12GB
+            '--vggt_conf',    '1.2',
+            '--dust3r_conf',  '3.0'
+          ];
+        } else if (engine === 'vggt' && fs.existsSync(vggtScript)) {
+          job.logs.push('[Stage 1/2] Launching VGGT Visual Geometry Grounded Transformer Pipeline...');
+          pyScript = vggtScript;
+          pyArgs = [
+            vggtScript,
+            '--input_dir', imagesDir,
+            '--output', outObj,
+            '--max_images', '6',
+            '--conf_thresh', '1.5'
+          ];
+        } else if (fs.existsSync(dust3rScript)) {
+          job.logs.push('[Stage 1/2] Launching DUSt3R Dense Neural 3D Transformer Pipeline...');
+          pyScript = dust3rScript;
+          pyArgs = [
+            dust3rScript,
+            '--input_dir', imagesDir,
+            '--output', outObj,
+            '--img_size', '224',
+            '--max_images', '12',
+            '--conf_thresh', '3.5'
+          ];
+        } else {
+          job.logs.push('[Stage 1/2] Launching Python High-Precision Photogrammetry Pipeline...');
+          pyScript = mainScript;
+          pyArgs = [
+            mainScript,
+            '--input_dir', imagesDir,
+            '--output', outObj,
+            '--format', 'obj',
+            '--feature_type', 'SIFT',
+            '--mesh_method', 'poisson'
+          ];
+        }
+
+        const pyProcess = spawn('python', pyArgs);
 
         pyProcess.stdout.on('data', (d) => {
           const raw = d.toString();
@@ -215,7 +308,12 @@ app.post('/api/reconstruct/start_project', async (req, res) => {
 
         const exitCode = await new Promise((resolve) => pyProcess.on('close', resolve));
 
-        if (exitCode !== 0 || !fs.existsSync(outObj)) {
+        // Hybrid pipeline writes outHybridPfx + '.obj'; normalise to outObj
+        const resolvedObj = (engine === 'hybrid' && fs.existsSync(outHybridPfx + '.obj'))
+          ? outHybridPfx + '.obj'
+          : outObj;
+
+        if (exitCode !== 0 || !fs.existsSync(resolvedObj)) {
           job.status = 'error';
           job.logs.push(`[ERROR] Python pipeline failed with exit code ${exitCode}.`);
           return;
@@ -224,11 +322,18 @@ app.post('/api/reconstruct/start_project', async (req, res) => {
         // Copy generated 3D OBJ to public/models and ../output for universal Three.js accessibility
         const publicModelsDir = path.resolve('public', 'models');
         fs.mkdirSync(publicModelsDir, { recursive: true });
-        fs.copyFileSync(outObj, path.join(publicModelsDir, `${cleanName}.obj`));
+        fs.copyFileSync(resolvedObj, path.join(publicModelsDir, `${cleanName}.obj`));
+
+        // Also copy .splat if the hybrid produced one
+        const hybridSplat = outHybridPfx + '.splat';
+        if (engine === 'hybrid' && fs.existsSync(hybridSplat)) {
+          fs.copyFileSync(hybridSplat, path.join(publicModelsDir, `${cleanName}.splat`));
+          job.logs.push(`[INFO] Hybrid .splat exported: ${cleanName}.splat`);
+        }
 
         const globalOutputDir = path.resolve('..', 'output');
         fs.mkdirSync(globalOutputDir, { recursive: true });
-        fs.copyFileSync(outObj, path.join(globalOutputDir, `${cleanName}.obj`));
+        fs.copyFileSync(resolvedObj, path.join(globalOutputDir, `${cleanName}.obj`));
 
         // Create points3D.txt from OBJ vertices if not already present
         if (fs.existsSync(outObj)) {
@@ -282,8 +387,309 @@ app.get('/api/jobs/:jobId/status', (req, res) => {
   }
   return res.json(job);
 });
+// 3b. GenPC Missing Pixel Completion Endpoint
+app.post('/api/genpc/complete', async (req, res) => {
+  try {
+    const { modelName = 'dust3r_mode1l.obj', inpaintRatio = 0.35 } = req.body;
+    const { spawn } = await import('child_process');
 
-// List all available reconstructed 3D model datasets on disk
+    const publicModelsDir = path.resolve('public', 'models');
+    const outputHMM = path.resolve('..', 'output');
+
+    let inputPath = path.join(publicModelsDir, modelName);
+    if (!fs.existsSync(inputPath)) {
+      inputPath = path.join(outputHMM, modelName);
+    }
+    if (!fs.existsSync(inputPath)) {
+      return res.status(404).json({ error: `Model ${modelName} not found.` });
+    }
+
+    const baseName = modelName.replace(/\.obj$/i, '');
+    const outFilename = `${baseName}_genpc.obj`;
+    const outObjPath = path.join(publicModelsDir, outFilename);
+    const globalOutObjPath = path.join(outputHMM, outFilename);
+
+    const pyScript = path.resolve('..', 'genpc_engine.py');
+    const pyCode = `
+import sys, json
+from genpc_engine import GenPCCompletionEngine
+res = GenPCCompletionEngine.complete_obj_file(
+    input_obj_path=r'${inputPath}',
+    output_obj_path=r'${outObjPath}',
+    inpaint_ratio=${parseFloat(inpaintRatio)}
+)
+# Output JSON result for node server
+info = {
+    "status": "success",
+    "model_name": "${outFilename}",
+    "captured_count": res["captured_count"],
+    "generated_count": res["generated_count"],
+    "total_count": res["total_count"],
+    "missing_pixels_inpainted": res["missing_pixels_inpainted"],
+    "captured_pct": res["captured_pct"],
+    "generated_pct": res["generated_pct"],
+    "avg_confidence": res["avg_confidence"]
+}
+print("__GENPC_JSON__" + json.dumps(info))
+`;
+
+    const pyProcess = spawn('python', ['-c', pyCode], { cwd: path.resolve('..') });
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', d => stdoutData += d.toString());
+    pyProcess.stderr.on('data', d => stderrData += d.toString());
+
+    pyProcess.on('close', code => {
+      if (code === 0 && stdoutData.includes('__GENPC_JSON__')) {
+        try {
+          if (fs.existsSync(outObjPath)) {
+            fs.copyFileSync(outObjPath, globalOutObjPath);
+          }
+          const jsonStr = stdoutData.split('__GENPC_JSON__')[1].trim();
+          const parsed = JSON.parse(jsonStr);
+          return res.json(parsed);
+        } catch (parseErr) {
+          return res.status(500).json({ error: 'Failed to parse GenPC completion output.' });
+        }
+      } else {
+        console.error('GenPC completion process failed:', stderrData || stdoutData);
+        return res.status(500).json({ error: 'GenPC completion failed: ' + (stderrData || stdoutData) });
+      }
+    });
+  } catch (err) {
+    console.error('GenPC API error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3c. Autonomous Video-Aware Multimodal 3D World Completion Agent Endpoint
+app.post('/api/agent/complete', async (req, res) => {
+  try {
+    const { modelName = 'video_3d_world.obj', videoSource = null, datasetName = null } = req.body;
+    const { spawn } = await import('child_process');
+
+    const publicModelsDir = path.resolve('public', 'models');
+    const outputHMM = path.resolve('..', 'output');
+
+    let inputPath = path.join(publicModelsDir, modelName);
+    if (!fs.existsSync(inputPath)) {
+      inputPath = path.join(outputHMM, modelName);
+    }
+    if (!fs.existsSync(inputPath)) {
+      return res.status(404).json({ error: `Model ${modelName} not found.` });
+    }
+
+    const baseName = modelName.replace(/\.obj$/i, '');
+    const outFilename = `${baseName}_agent_infilled.obj`;
+    const outObjPath = path.join(publicModelsDir, outFilename);
+    const globalOutObjPath = path.join(outputHMM, outFilename);
+
+    const pyCode = `
+import sys, json, os
+from video_aware_agent import VideoAware3DWorldAgent
+agent = VideoAware3DWorldAgent(verbose=False)
+frame_dir = r'${videoSource || ''}' if r'${videoSource || ''}' and os.path.exists(r'${videoSource || ''}') else None
+if not frame_dir:
+    frame_dir = VideoAware3DWorldAgent.resolve_frame_directory(r'${inputPath}', r'${datasetName || ''}')
+
+res = agent.run_agentic_pipeline(
+    video_path_or_dir=frame_dir,
+    model_path=r'${inputPath}',
+    dataset_name=r'${datasetName || ''}',
+    output_path=r'${outObjPath}'
+)
+info = {
+    "status": "success",
+    "model_name": "${outFilename}",
+    "captured_count": res["captured_count"],
+    "generated_count": res["generated_count"],
+    "total_count": res["total_count"],
+    "video_recovered_count": res["video_recovered_count"],
+    "generative_prior_count": res["generative_prior_count"],
+    "pass_rate": res["pass_rate"],
+    "avg_confidence": res["avg_confidence"],
+    "trace_logs": res["trace_logs"],
+    "elapsed_seconds": res["elapsed_seconds"]
+}
+print("__AGENT_JSON__" + json.dumps(info))
+`;
+
+    const pyProcess = spawn('python', ['-c', pyCode], { cwd: path.resolve('..') });
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', d => stdoutData += d.toString());
+    pyProcess.stderr.on('data', d => stderrData += d.toString());
+
+    pyProcess.on('close', code => {
+      if (code === 0 && stdoutData.includes('__AGENT_JSON__')) {
+        try {
+          if (fs.existsSync(outObjPath)) {
+            fs.copyFileSync(outObjPath, globalOutObjPath);
+          }
+          const jsonStr = stdoutData.split('__AGENT_JSON__')[1].trim();
+          const parsed = JSON.parse(jsonStr);
+          return res.json(parsed);
+        } catch (parseErr) {
+          return res.status(500).json({ error: 'Failed to parse Video Agent output.' });
+        }
+      } else {
+        console.error('Video Agent process failed:', stderrData || stdoutData);
+        return res.status(500).json({ error: 'Video Agent failed: ' + (stderrData || stdoutData) });
+      }
+    });
+  } catch (err) {
+    console.error('Video Agent API error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3d. Semantic 3D Scene Completion Endpoint (Isolated Experimental Module)
+app.post('/api/semantic_completion/run', async (req, res) => {
+  try {
+    const {
+      modelName = 'video_3d_world.obj',
+      model = 'geometric_semantic',
+      confidence = 0.65,
+      iterations = 25,
+      exportMode = 'rgb',
+      videoSource = null,
+      groundFloating = true,
+      continuousTerrain = true
+    } = req.body;
+    const { spawn } = await import('child_process');
+
+    const publicModelsDir = path.resolve('public', 'models');
+    const outputHMM = path.resolve('..', 'output');
+
+    let inputPath = path.join(publicModelsDir, modelName);
+    if (!fs.existsSync(inputPath)) {
+      inputPath = path.join(outputHMM, modelName);
+    }
+    if (!fs.existsSync(inputPath)) {
+      return res.status(404).json({ error: `Model ${modelName} not found.` });
+    }
+
+    const baseName = modelName.replace(/\.obj$/i, '');
+    const outFilename = `${baseName}_semantic_completed.obj`;
+    const outObjPath = path.join(publicModelsDir, outFilename);
+    const globalOutObjPath = path.join(outputHMM, outFilename);
+
+    let kfDir = videoSource && fs.existsSync(videoSource) ? videoSource : path.join(outputHMM, 'video_keyframes');
+    if (!fs.existsSync(kfDir)) {
+      kfDir = '';
+    }
+
+    const pyCode = `
+import sys, json, os, time
+from semantic_completion import PointCloudAdapter, VideoFeatureAdapter, SemanticCompletionEngine, CompletionConfig, ExportFormat
+
+scene_input = PointCloudAdapter.load_from_file(r'${inputPath}')
+video_adapter = None
+if r'${kfDir}' and os.path.isdir(r'${kfDir}'):
+    video_adapter = VideoFeatureAdapter(keyframe_dir=r'${kfDir}')
+
+config = CompletionConfig(
+    model_name='${model}',
+    confidence_threshold=${confidence},
+    max_frontier_iterations=${iterations},
+    deep_scene_infill=True,
+    ground_floating_structures=${groundFloating ? 'True' : 'False'},
+    continuous_terrain_infill=${continuousTerrain ? 'True' : 'False'},
+    disaster_conservative_mode=True
+)
+engine = SemanticCompletionEngine(config)
+res = engine.run_completion(scene_input, video_adapter=video_adapter)
+
+export_fmt = ExportFormat('${exportMode}')
+export_info = res["fusion_manager"].export_obj(
+    output_path=r'${outObjPath}',
+    export_format=export_fmt,
+    min_confidence=${confidence},
+    include_unknown=True
+)
+
+info = {
+    "status": "success",
+    "model_name": "${outFilename}",
+    "total_points": export_info["total_points"],
+    "observed_count": export_info["observed_count"],
+    "predicted_count": export_info["predicted_count"],
+    "unknown_count": export_info["unknown_count"],
+    "model_used": res["diagnostics"]["model_name"],
+    "acceptance_rate": f"{res['diagnostics']['acceptance_rate_pct']}%",
+    "mean_confidence": str(res["diagnostics"]["mean_confidence"]),
+    "structures_grounded": res["diagnostics"].get("structures_grounded", 0),
+    "terrain_voids_sealed": res["diagnostics"].get("terrain_voids_sealed", 0),
+    "inference_time_sec": str(res["diagnostics"]["inference_time_sec"]) + "s",
+    "vram_used": str(res["diagnostics"]["gpu_memory_used_mb"]) + " MB"
+}
+print("__SEMANTIC_JSON__" + json.dumps(info))
+`;
+
+    const pyProcess = spawn('python', ['-c', pyCode], { cwd: path.resolve('..') });
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', d => stdoutData += d.toString());
+    pyProcess.stderr.on('data', d => stderrData += d.toString());
+
+    pyProcess.on('close', code => {
+      if (code === 0 && stdoutData.includes('__SEMANTIC_JSON__')) {
+        try {
+          if (fs.existsSync(outObjPath)) {
+            fs.copyFileSync(outObjPath, globalOutObjPath);
+          }
+          const jsonStr = stdoutData.split('__SEMANTIC_JSON__')[1].trim();
+          const parsed = JSON.parse(jsonStr);
+          return res.json(parsed);
+        } catch (parseErr) {
+          return res.status(500).json({ error: 'Failed to parse Semantic Completion output.' });
+        }
+      } else {
+        console.error('Semantic Completion process failed:', stderrData || stdoutData);
+        return res.status(500).json({ error: 'Semantic Completion failed: ' + (stderrData || stdoutData) });
+      }
+    });
+  } catch (err) {
+    console.error('Semantic Completion API error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. List all .obj files actually on disk
+app.get('/api/models', (req, res) => {
+  try {
+    const publicModelsDir = path.resolve('public', 'models');
+    const projectsDir = path.resolve('projects');
+    const results = [];
+
+    // Scan public/models/ for all .obj files
+    if (fs.existsSync(publicModelsDir)) {
+      const files = fs.readdirSync(publicModelsDir).filter(f => f.endsWith('.obj'));
+      for (const file of files) {
+        const name = file.replace('.obj', '');
+        const stat = fs.statSync(path.join(publicModelsDir, file));
+        // Check if this came from a real project (has a matching projects/ subfolder)
+        const isProject = fs.existsSync(path.join(projectsDir, name));
+        results.push({
+          filename: file,
+          name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          datasetName: name,
+          sizeKB: Math.round(stat.size / 1024),
+          isProject
+        });
+      }
+    }
+
+    return res.json({ models: results });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+
 app.get('/api/datasets', async (req, res) => {
   try {
     const fs = await import('fs');

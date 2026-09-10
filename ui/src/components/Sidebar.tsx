@@ -78,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onSignOut}
             className="flex flex-col items-center gap-1.5 py-2 px-1 w-full text-center text-slate-400 hover:text-red-650 hover:bg-red-50/50 rounded-xl transition cursor-pointer"
-            title="Sign out of AeroMap"
+            title="Sign out of Aevora"
           >
             <LogOut size={20} className="stroke-[1.8px]" />
             <span className="text-[10px] tracking-wide font-medium">Sign Out</span>

@@ -134,27 +134,47 @@ def run_dust3r_reconstruction(
     if not HAS_DUST3R:
         raise ImportError(f"DUSt3R could not be imported: {DUST3R_IMPORT_ERROR}")
 
-    # 1. Gather Images
+    # 1. Gather Images or Video
+    video_extensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".insv"]
     image_files = []
-    for ext in ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG", "*.tif", "*.tiff"]:
-        image_files.extend(glob.glob(os.path.join(image_dir, ext)))
+
+    if os.path.isfile(image_dir) and any(image_dir.lower().endswith(ve) for ve in video_extensions):
+        from video_to_3d_pipeline import extract_sharp_keyframes
+        frames_dir = os.path.join(os.path.dirname(image_dir), "extracted_frames")
+        print(f"[ 10%] Input is a video file. Extracting sharp keyframes to '{frames_dir}'...")
+        image_files = extract_sharp_keyframes(image_dir, output_dir=frames_dir, target_keyframes=max_images)
+    elif os.path.isdir(image_dir):
+        for ext in ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG", "*.tif", "*.tiff"]:
+            image_files.extend(glob.glob(os.path.join(image_dir, ext)))
+        if len(image_files) < 2:
+            found_videos = []
+            for ve in video_extensions:
+                found_videos.extend(glob.glob(os.path.join(image_dir, f"*{ve}")))
+                found_videos.extend(glob.glob(os.path.join(image_dir, f"*{ve.upper()}")))
+            if found_videos:
+                chosen_video = found_videos[0]
+                from video_to_3d_pipeline import extract_sharp_keyframes
+                frames_dir = os.path.join(image_dir, "extracted_frames")
+                print(f"[ 10%] Video detected '{chosen_video}'. Extracting sharp keyframes...")
+                image_files = extract_sharp_keyframes(chosen_video, output_dir=frames_dir, target_keyframes=max_images)
+
     image_files = sorted(list(set(image_files)))
 
     if len(image_files) < 2:
         raise ValueError(f"Found {len(image_files)} images in '{image_dir}'. Need at least 2 images.")
 
-    print(f"[INFO] Total images found: {len(image_files)}")
+    print(f"[ 15%] Total images/views identified: {len(image_files)}")
 
     # Subsample if large collection and running on CPU
     if len(image_files) > max_images:
         step = max(1, len(image_files) // max_images)
         sampled_files = image_files[::step][:max_images]
-        print(f"[INFO] Selected {len(sampled_files)} keyframe views across flight sequence.")
+        print(f"[ 18%] Selected {len(sampled_files)} keyframe views across flight sequence.")
     else:
         sampled_files = image_files
 
     # 2. Load Model
-    print(f"[INFO] Loading Transformer weights ({model_name})...")
+    print(f"[ 25%] Loading Transformer weights ({model_name})...")
     try:
         model = AsymmetricCroCo3DStereo.from_pretrained(model_name).to(device)
         model.eval()
@@ -162,26 +182,26 @@ def run_dust3r_reconstruction(
         raise RuntimeError(f"Could not load model from HuggingFace ({err}).")
 
     # 3. Load Images
-    print(f"[INFO] Preprocessing {len(sampled_files)} views to {image_size}x{image_size}...")
+    print(f"[ 35%] Preprocessing {len(sampled_files)} views to {image_size}x{image_size}...")
     images = load_images(sampled_files, size=image_size)
 
     # 4. Create Image Pairs
     scene_graph = "complete" if len(images) <= 6 else "swin-sequential-3"
     pairs = make_pairs(images, scene_graph=scene_graph, symmetrize=True)
-    print(f"[INFO] Formed {len(pairs)} stereo pairs. Running ViT dense prediction...")
+    print(f"[ 45%] Formed {len(pairs)} stereo pairs. Running ViT dense prediction...")
 
     # 5. Run Pairwise Inference
     with torch.no_grad():
         output = inference(pairs, model, device=device, batch_size=1)
 
     # 6. Global Multi-View Point Cloud Optimization
-    print("[INFO] Optimizing global 3D coordinate alignment...")
+    print("[ 65%] Optimizing global 3D coordinate alignment...")
     scene = global_aligner(output, device=device, mode=GlobalAlignerMode.PointCloudOptimizer)
     niter = 150 if device == "cpu" else 300
     scene.compute_global_alignment(init="mst", niter=niter, schedule="cosine", lr=0.01)
 
     # 7. Clean multi-view depth and prune non-overlapping boundary cards
-    print("[INFO] Pruning peripheral image boundary cards with multi-view consistency...")
+    print("[ 80%] Pruning peripheral image boundary cards with multi-view consistency...")
     try:
         scene = scene.clean_pointcloud()
     except Exception as e:
@@ -261,7 +281,7 @@ def run_dust3r_reconstruction(
         colors = colors / 255.0
 
     # 8. Statistical & Radius Outlier Removal
-    print("[INFO] Applying statistical outlier removal (SOR) and floater elimination...")
+    print("[ 90%] Applying statistical outlier removal (SOR) and floater elimination...")
     pts3d, colors, conf_arr = filter_point_cloud_outliers(
         points=pts3d,
         colors=colors,
@@ -270,7 +290,7 @@ def run_dust3r_reconstruction(
         std_ratio=1.5
     )
 
-    print(f"\n[SUCCESS] Reconstructed {len(pts3d):,} clean 3D points from Transformer!")
+    print(f"\n[ 95%] Reconstructed {len(pts3d):,} clean 3D points from Transformer!")
 
     # 9. Optional export to OBJ
     if output_path:
@@ -283,7 +303,7 @@ def run_dust3r_reconstruction(
         print(f"           Output saved to: {os.path.abspath(output_path)}")
 
     elapsed = time.time() - start_time
-    print(f"[FINISHED] DUSt3R 3D model generated in {elapsed:.1f}s ({elapsed/60:.2f} min)!")
+    print(f"[100%] [SUCCESS] DUSt3R 3D model generated in {elapsed:.1f}s ({elapsed/60:.2f} min)!")
     print("=" * 70)
 
     return {

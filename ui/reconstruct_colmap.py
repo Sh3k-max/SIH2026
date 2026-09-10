@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AeroMap High-Density Photogrammetry Reconstructor (Powered by pycolmap)
+Aevora High-Density Photogrammetry Reconstructor (Powered by pycolmap)
 Takes any folder of raw photos and reconstructs survey-grade 60,000+ 3D points with Ceres Bundle Adjustment.
 Outputs standard COLMAP text files (points3D.txt, images.txt, cameras.txt) and .PLY point clouds.
 """
@@ -36,7 +36,7 @@ def run_photogrammetry(images_dir: str, output_dir: str, matcher_type: str = "se
             pass
 
     print("=================================================================")
-    print("[*] AeroMap Survey-Grade 3D Photogrammetry (COLMAP C++ Engine)")
+    print("[*] Aevora Survey-Grade 3D Photogrammetry (COLMAP C++ Engine)")
     print("=================================================================")
     print(f"[*] Image Input Directory : {images_path}")
     print(f"[*] Output Directory      : {output_path}")
@@ -118,7 +118,7 @@ def run_photogrammetry(images_dir: str, output_dir: str, matcher_type: str = "se
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AeroMap Photogrammetry Reconstructor")
+    parser = argparse.ArgumentParser(description="Aevora Photogrammetry Reconstructor")
     parser.add_argument("--images_dir", type=str, default="./input_images", help="Directory containing raw photos")
     parser.add_argument("--output_dir", type=str, default="./system_reconstructed_model", help="Directory to save output 3D model")
     parser.add_argument("--matcher", type=str, choices=["exhaustive", "sequential"], default="sequential", help="Matcher mode: sequential (drone flight path / video) or exhaustive")

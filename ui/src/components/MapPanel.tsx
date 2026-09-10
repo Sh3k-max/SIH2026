@@ -113,7 +113,7 @@ export const MapPanel: React.FC<MapPanelProps> = ({ onProcessingComplete, unit, 
     const runRealPipeline = async () => {
       if (!isProcessing) return;
       
-      setTerminalLogs(["[INFO] Contacting AeroMap Gateway Server..."]);
+      setTerminalLogs(["[INFO] Contacting Aevora Gateway Server..."]);
       setProgress(0);
       
       try {
@@ -760,7 +760,7 @@ export const MapPanel: React.FC<MapPanelProps> = ({ onProcessingComplete, unit, 
             <div className="flex-1 space-y-1 select-text">
               {terminalLogs.length === 0 ? (
                 <div className="text-slate-400 italic mt-4 text-center font-sans">
-                  AeroMap pipeline idle. Select options and press 'Start Processing' to compile point cloud datasets.
+                  Aevora pipeline idle. Select options and press 'Start Processing' to compile point cloud datasets.
                 </div>
               ) : (
                 terminalLogs.map((log, index) => {

@@ -22,6 +22,7 @@ import torch
 from gaussian_splat_engine import GaussianSplatEngine
 from geofence_engine import GeofenceEngine
 from ai_completion_engine import AISceneCompletionEngine
+from genpc_engine import GenPCCompletionEngine
 from coverage_engine import CoverageAnalysisEngine
 
 # DUSt3R imports if available
@@ -222,6 +223,7 @@ def run_hybrid_reconstruction(
     geofence_radius: float = 25.0,
     max_images: int = 24,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    use_genpc: bool = True,
     progress_callback = None
 ) -> Dict:
     """
@@ -229,11 +231,11 @@ def run_hybrid_reconstruction(
     """
     start_time = time.time()
     print("\n" + "=" * 80)
-    print("[HYBRID RECONSTRUCTION] DUSt3R + 3D GAUSSIAN SPLATTING + AI COMPLETION")
+    print("[HYBRID RECONSTRUCTION] DUSt3R + 3D GAUSSIAN SPLATTING + AI / GenPC COMPLETION")
     print(f"   Input Source    : {input_path}")
     print(f"   Output Prefix   : {output_prefix}")
     print(f"   Confidence Thr  : {conf_thresh}")
-    print(f"   AI Completion   : {'ENABLED' if enable_ai_completion else 'DISABLED'}")
+    print(f"   AI Completion   : {'ENABLED (GenPC Prior)' if use_genpc else ('ENABLED' if enable_ai_completion else 'DISABLED')}")
     print(f"   Geofence Radius : {geofence_radius}m ({geofence_type.upper()})")
     print(f"   Device          : {device.upper()}")
     print("=" * 80)
@@ -303,23 +305,40 @@ def run_hybrid_reconstruction(
     aligned_points, rot_matrix, trans_vec = GroundPlaneGravityAligner.align_to_world_y_up(points)
     print(f"[INFO] Coordinate Alignment: Center calibrated at (0, 0), Ground elevation adjusted to Y=0.")
 
-    # 4. Optional AI-Based Hierarchical Gap Completion
+    # 4. Optional AI-Based Hierarchical Gap Completion (GenPC Model)
     if enable_ai_completion and len(aligned_points) > 50:
-        print("\n[STEP 4] Executing AI Hierarchical Scene Gap Completion on occluded zones...")
-        if progress_callback:
-            progress_callback(0.70, "Executing AI Scene Completion on occluded regions...")
+        if use_genpc:
+            print("\n[STEP 4] Executing GenPC Zero-Shot Completion & Missing Pixel Inpainting...")
+            if progress_callback:
+                progress_callback(0.70, "Executing GenPC Missing Pixel Inpainting & Completion...")
 
-        comp_res = AISceneCompletionEngine.complete_scene_gaps(
-            captured_points=aligned_points,
-            captured_colors=colors,
-            coverage_confidences=confidences,
-            grid_resolution=0.40
-        )
-        total_points = comp_res["total_points"]
-        total_colors = comp_res["total_colors"]
-        total_conf = comp_res["confidences"]
-        sources = comp_res["sources"]
-        print(f"[AI-COMPLETION] Final Unified Geometry: {len(total_points):,} points ({comp_res['captured_pct']}% captured, {comp_res['generated_pct']}% generated).")
+            comp_res = GenPCCompletionEngine.complete_missing_pixels(
+                points=aligned_points,
+                colors=colors,
+                confidences=confidences,
+                inpaint_ratio=0.35
+            )
+            total_points = comp_res["total_points"]
+            total_colors = comp_res["total_colors"]
+            total_conf = comp_res["confidences"]
+            sources = comp_res["sources"]
+            print(f"[GenPC] Repaired {comp_res['missing_pixels_inpainted']:,} missing pixels ({comp_res['generated_count']:,} new 3D points).")
+        else:
+            print("\n[STEP 4] Executing AI Hierarchical Scene Gap Completion on occluded zones...")
+            if progress_callback:
+                progress_callback(0.70, "Executing AI Scene Completion on occluded regions...")
+
+            comp_res = AISceneCompletionEngine.complete_scene_gaps(
+                captured_points=aligned_points,
+                captured_colors=colors,
+                coverage_confidences=confidences,
+                grid_resolution=0.40
+            )
+            total_points = comp_res["total_points"]
+            total_colors = comp_res["total_colors"]
+            total_conf = comp_res["confidences"]
+            sources = comp_res["sources"]
+            print(f"[AI-COMPLETION] Final Unified Geometry: {len(total_points):,} points ({comp_res['captured_pct']}% captured, {comp_res['generated_pct']}% generated).")
     else:
         total_points = aligned_points
         total_colors = colors

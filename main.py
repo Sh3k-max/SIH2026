@@ -64,17 +64,39 @@ def main():
 
     args = parser.parse_args()
 
-    # Discover images
+    # Discover images or video
     supported_extensions = ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG", "*.tif", "*.tiff"]
+    video_extensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".insv"]
     image_paths = []
-    for ext in supported_extensions:
-        image_paths.extend(glob.glob(os.path.join(args.input_dir, ext)))
+
+    # Check if input_dir is directly a video file
+    if os.path.isfile(args.input_dir) and any(args.input_dir.lower().endswith(ve) for ve in video_extensions):
+        from video_to_3d_pipeline import extract_sharp_keyframes
+        frames_dir = os.path.join(os.path.dirname(args.input_dir), "extracted_frames")
+        print(f"[INFO] Input is a video file. Extracting sharp keyframes to '{frames_dir}'...")
+        image_paths = extract_sharp_keyframes(args.input_dir, output_dir=frames_dir, target_keyframes=24)
+    elif os.path.isdir(args.input_dir):
+        for ext in supported_extensions:
+            image_paths.extend(glob.glob(os.path.join(args.input_dir, ext)))
+
+        # If no images found, look for video files in the input directory
+        if len(image_paths) < 2:
+            found_videos = []
+            for ve in video_extensions:
+                found_videos.extend(glob.glob(os.path.join(args.input_dir, f"*{ve}")))
+                found_videos.extend(glob.glob(os.path.join(args.input_dir, f"*{ve.upper()}")))
+            if found_videos:
+                chosen_video = found_videos[0]
+                from video_to_3d_pipeline import extract_sharp_keyframes
+                frames_dir = os.path.join(args.input_dir, "extracted_frames")
+                print(f"[INFO] Video detected '{chosen_video}'. Extracting sharp keyframes...")
+                image_paths = extract_sharp_keyframes(chosen_video, output_dir=frames_dir, target_keyframes=24)
 
     # Sort to ensure sequential order if named sequentially
     image_paths = sorted(list(set(image_paths)))
 
     if len(image_paths) < 2:
-        print(f"[ERROR] Found only {len(image_paths)} images in '{args.input_dir}'. At least 2 overlapping images are required.")
+        print(f"[ERROR] Found only {len(image_paths)} images/frames in '{args.input_dir}'. At least 2 overlapping frames are required.")
         sys.exit(1)
 
     print("=" * 65)

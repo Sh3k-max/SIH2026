@@ -24,6 +24,8 @@ interface ProjectWizardProps {
     unit: string;
     cameras?: CameraTelemetry[];
     datasetName?: string;
+    jobId?: string;
+    isProcessing?: boolean;
   }) => void;
 }
 
@@ -53,6 +55,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
   const [projectType, setProjectType] = useState<'new' | 'merged'>('new');
+  const [engine, setEngine] = useState<'dust3r' | 'vggt' | 'genpc' | 'hybrid'>('genpc');
   const [useDefaultLocation, setUseDefaultLocation] = useState(false);
 
   // Step 2: Selected Images
@@ -124,7 +127,12 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
         };
       });
       setCamerasList(newCameras);
-      toast.success(`Imported ${fileList.length} survey photos!`);
+      const isVideo = fileList.some(f => /\.(mp4|mov|avi|mkv|webm)$/i.test(f.name));
+      if (isVideo) {
+        toast.success(`Imported drone video: ${fileList[0].name}. Keyframes will be automatically extracted!`);
+      } else {
+        toast.success(`Imported ${fileList.length} survey photos!`);
+      }
     }
   };
 
@@ -217,8 +225,9 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
       toast.warning('Please enter a project name.');
       return;
     }
-    if (imageList.length < 2 && rawFiles.length < 2) {
-      toast.warning('Photogrammetry requires at least 2 overlapping drone images. Please select images or load sample flight.');
+    const hasVideo = rawFiles.some(f => /\.(mp4|mov|avi|mkv|webm)$/i.test(f.name)) || imageList.some(f => /\.(mp4|mov|avi|mkv|webm)$/i.test(f));
+    if (!hasVideo && imageList.length < 2 && rawFiles.length < 2) {
+      toast.warning('Photogrammetry requires either a video file or at least 2 overlapping drone images.');
       return;
     }
 
@@ -226,34 +235,41 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
 
     setIsUploading(true);
     setProgressPct(5);
-    setUploadStatusText('Initializing photogrammetry workspace...');
+    setUploadStatusText(hasVideo ? 'Uploading drone video and preparing keyframe extraction...' : 'Initializing photogrammetry workspace...');
     setRecentLogs([]);
 
     try {
-      // 1. Upload raw files if chosen through browser file picker
+      // 1. Upload raw files using zero-copy binary streaming (prevents browser Out of Memory crashes)
       if (rawFiles.length > 0) {
-        setUploadStatusText(`Uploading ${rawFiles.length} drone photos to photogrammetry engine...`);
-        const batchSize = 4;
-        for (let i = 0; i < rawFiles.length; i += batchSize) {
-          const chunk = rawFiles.slice(i, i + batchSize);
-          const payloadFiles = await Promise.all(
-            chunk.map(async (f) => ({
-              fileName: f.name,
-              base64: await readFileAsBase64(f)
-            }))
+        for (let i = 0; i < rawFiles.length; i++) {
+          const f = rawFiles[i];
+          const sizeMB = (f.size / (1024 * 1024)).toFixed(1);
+          setUploadStatusText(`Streaming [${i + 1}/${rawFiles.length}] ${f.name} (${sizeMB} MB) to engine...`);
+
+          const uploadRes = await fetch(
+            `/api/upload/stream?projectName=${encodeURIComponent(cleanName)}&fileName=${encodeURIComponent(f.name)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/octet-stream' },
+              body: f
+            }
           );
-          setUploadStatusText(`Uploading images ${i + 1}-${Math.min(i + batchSize, rawFiles.length)} of ${rawFiles.length}...`);
-          await fetch('/api/upload/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectName: cleanName, files: payloadFiles })
-          });
-          setProgressPct(Math.round(5 + (15 * (i + chunk.length) / rawFiles.length)));
+
+          if (!uploadRes.ok) {
+            throw new Error(`Failed to upload ${f.name}`);
+          }
+          setProgressPct(Math.round(5 + (20 * (i + 1) / rawFiles.length)));
         }
       }
 
       // 2. Trigger real Python photogrammetry reconstruction job
-      setUploadStatusText('Starting Python 3D Photogrammetry Engine (SIFT + SfM + Poisson)...');
+      setUploadStatusText(
+        engine === 'genpc'
+          ? 'Starting GenPC Zero-Shot Generative Prior & Missing Pixel Inpainting...'
+          : engine === 'vggt'
+          ? 'Starting VGGT Visual Geometry Grounded Transformer Pipeline...'
+          : 'Starting DUSt3R Dense Neural 3D Transformer Engine...'
+      );
       setProgressPct(12);
 
       const startRes = await fetch('/api/reconstruct/start_project', {
@@ -261,7 +277,8 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectName: cleanName,
-          localPath: (rawFiles.length === 0 && path) ? path : ''
+          localPath: (rawFiles.length === 0 && path) ? path : '',
+          engine
         })
       });
 
@@ -272,37 +289,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
 
       const jobId = startData.jobId;
 
-      // 3. Poll real pipeline progress & stream logs
-      let isDone = false;
-      while (!isDone) {
-        await new Promise(r => setTimeout(r, 800));
-        const statusRes = await fetch(`/api/jobs/${jobId}/status`);
-        if (!statusRes.ok) continue;
-
-        const job = await statusRes.json();
-
-        if (typeof job.progress === 'number') {
-          setProgressPct(job.progress);
-        }
-
-        if (job.logs && job.logs.length > 0) {
-          const lastLog = job.logs[job.logs.length - 1];
-          setUploadStatusText(lastLog);
-          setRecentLogs(job.logs.slice(-4));
-        }
-
-        if (job.status === 'complete') {
-          setProgressPct(100);
-          setUploadStatusText('[SUCCESS] 3D Model Reconstructed Successfully!');
-          await new Promise(r => setTimeout(r, 700));
-          isDone = true;
-          break;
-        } else if (job.status === 'error') {
-          throw new Error(job.logs?.slice(-1)[0] || 'Python Photogrammetry pipeline encountered an error.');
-        }
-      }
-
-      toast.success(`Project "${name}" 3D model successfully reconstructed!`);
+      // Hand off to App immediately — App will show the processing view & poll for progress
       onClose();
       onFinish({
         name,
@@ -314,7 +301,9 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
         datum,
         unit,
         cameras: camerasList,
-        datasetName: cleanName
+        datasetName: cleanName,
+        jobId,
+        isProcessing: true
       });
 
       // reset wizard inputs
@@ -336,7 +325,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in-scale select-none">
       
-      {/* Real-time Reconstruction Progress Overlay */}
+      {/* Upload Progress Overlay (shown only during file upload phase) */}
       {isUploading && (
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 text-center space-y-5 rounded-2xl animate-fade-in-scale">
           <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center animate-pulse text-blue-400">
@@ -344,32 +333,23 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
           </div>
           <div className="space-y-1.5 max-w-lg">
             <h3 className="text-white font-display font-extrabold text-base tracking-wide">
-              Real Python Photogrammetry Reconstruction Running
+              Uploading & Starting Reconstruction...
             </h3>
             <p className="text-cyan-300 font-mono text-xs break-words leading-relaxed">
-              {uploadStatusText || 'Executing SIFT feature matching & 3D meshing...'}
+              {uploadStatusText || 'Uploading files and initializing the pipeline...'}
             </p>
           </div>
-          
-          {/* Real progress bar */}
+
+          {/* Progress bar */}
           <div className="w-80 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-            <div 
-              className="h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 rounded-full transition-all duration-300" 
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 rounded-full transition-all duration-300"
               style={{ width: `${Math.max(6, progressPct)}%` }}
             />
           </div>
           <div className="text-xs font-mono text-cyan-400 font-bold">
-            {progressPct}% Complete
+            {progressPct}%
           </div>
-
-          {/* Live terminal logs feed */}
-          {recentLogs.length > 0 && (
-            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 max-w-lg w-full text-left font-mono text-[10.5px] text-slate-300 space-y-1 shadow-inner">
-              {recentLogs.map((l, i) => (
-                <div key={i} className="truncate text-slate-400">&gt; {l}</div>
-              ))}
-            </div>
-          )}
         </div>
       )}
       
@@ -387,7 +367,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
         onChange={handleFileChange}
         className="hidden" 
         multiple 
-        accept="image/*" 
+        accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm" 
       />
 
       <div className="relative w-full max-w-[800px] bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] text-[#0F172A] font-sans">
@@ -499,6 +479,116 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
                   </label>
                 </div>
               </div>
+
+              {/* AI Reconstruction Engine Selector */}
+              <div className="mt-4 border border-[#E2E8F0] rounded-xl bg-slate-50/50 overflow-hidden">
+                <div className="px-4 py-2 border-b border-[#E2E8F0] bg-slate-50 flex items-center justify-between">
+                  <h3 className="font-mono text-[10px] uppercase tracking-wider text-slate-500">AI Reconstruction Engine</h3>
+                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">Neural 3D Pipeline</span>
+                </div>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* GenPC Option */}
+                  <div 
+                    onClick={() => setEngine('genpc')}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      engine === 'genpc' 
+                        ? 'border-purple-500 bg-purple-50/70 ring-2 ring-purple-500/20 shadow-sm' 
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="engineSelect"
+                        checked={engine === 'genpc'}
+                        onChange={() => setEngine('genpc')}
+                        className="w-4 h-4 text-purple-600 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-800">GenPC Generative Prior</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold ml-auto">CVPR 2025</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6 leading-snug">
+                      Zero-shot point cloud completion. Inpaints missing pixels & occluded voids via 3D depth prompting.
+                    </p>
+                  </div>
+
+                  {/* DUSt3R Option */}
+                  <div 
+                    onClick={() => setEngine('dust3r')}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      engine === 'dust3r' 
+                        ? 'border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-sm' 
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="engineSelect"
+                        checked={engine === 'dust3r'}
+                        onChange={() => setEngine('dust3r')}
+                        className="w-4 h-4 text-[#2563eb] cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-800">DUSt3R Neural AI</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-semibold ml-auto">Default</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6 leading-snug">
+                      Dense ViT 3D transformer. Unconstrained multi-view stereo point cloud reconstruction.
+                    </p>
+                  </div>
+
+                  {/* VGGT Option */}
+                  <div 
+                    onClick={() => setEngine('vggt')}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      engine === 'vggt' 
+                        ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/20 shadow-sm' 
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="engineSelect"
+                        checked={engine === 'vggt'}
+                        onChange={() => setEngine('vggt')}
+                        className="w-4 h-4 text-indigo-600 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-800">VGGT Transformer</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-semibold ml-auto">Fast</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6 leading-snug">
+                      Visual Geometry Grounded Transformer. Direct video or aerial camera tracking.
+                    </p>
+                  </div>
+                  {/* VGGT x DUSt3R Hybrid Option */}
+                  <div
+                    onClick={() => setEngine('hybrid')}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      engine === 'hybrid'
+                        ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="radio"
+                        name="engineSelect"
+                        checked={engine === 'hybrid'}
+                        onChange={() => setEngine('hybrid')}
+                        className="w-4 h-4 text-amber-600 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-800">VGGT &times; DUSt3R Hybrid</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 rounded font-semibold ml-auto border border-amber-200">
+                        Best Quality
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 pl-6 leading-snug">
+                      VGGT drift-free camera rig + DUSt3R pixel-density depth. Highest accuracy &amp; completeness.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -509,16 +599,21 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
                 Select Images
               </h3>
 
-              {/* Geotags validation banner */}
-              {imageList.length >= 5 ? (
+              {/* Geotags / Video validation banner */}
+              {rawFiles.some(f => /\.(mp4|mov|avi|mkv|webm)$/i.test(f.name)) || imageList.some(f => /\.(mp4|mov|avi|mkv|webm)$/i.test(f)) ? (
+                <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs mt-1 shrink-0 animate-fade-in-scale">
+                  <CheckCircle2 size={14} className="fill-emerald-500/10 text-emerald-500" />
+                  <span>Video selected! Sharp keyframes will be automatically extracted; press Next to proceed.</span>
+                </div>
+              ) : imageList.length >= 5 ? (
                 <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs mt-1 shrink-0 animate-fade-in-scale">
                   <CheckCircle2 size={14} className="fill-emerald-500/10 text-emerald-500" />
                   <span>Enough images are selected; press Next to proceed.</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-rose-600 font-bold text-xs mt-1 shrink-0">
+                <div className="flex items-center gap-2 text-amber-600 font-bold text-xs mt-1 shrink-0">
                   <AlertCircle size={14} />
-                  <span>Geotag check: Please select at least 5 cameras to resolve block parameters.</span>
+                  <span>Select at least 2 overlapping images or 1 drone video file.</span>
                 </div>
               )}
 
@@ -542,7 +637,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
                     onClick={handleAddImages}
                     className="px-2.5 py-1.5 border border-[#E2E8F0] rounded text-slate-700 hover:bg-slate-50 hover:text-[#0F172A] transition-colors text-xs font-bold shadow-sm bg-white btn-scale cursor-pointer"
                   >
-                    Select Images...
+                    Select Photos or Video...
                   </button>
                   <button
                     type="button"
@@ -722,7 +817,7 @@ export const ProjectWizard: React.FC<ProjectWizardProps> = ({ isOpen, onClose, o
         <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-[#E2E8F0] rounded-b-2xl shrink-0">
           <button 
             type="button"
-            onClick={() => toast.info('AeroMap Project Wizard: Steps 1-3 configure datum, camera telemetry, and photogrammetry inputs.')}
+            onClick={() => toast.info('Aevora Project Wizard: Steps 1-3 configure datum, camera telemetry, and photogrammetry inputs.')}
             className="text-slate-500 hover:text-[#0F172A] font-bold text-xs rounded px-4 py-2 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             Help

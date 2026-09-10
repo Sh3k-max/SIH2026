@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AeroMap 3D Photogrammetry & Structure-from-Motion (SfM) Pipeline
+Aevora 3D Photogrammetry & Structure-from-Motion (SfM) Pipeline
 Takes a sequence of raw drone/survey images and reconstructs a dense 3D point cloud & mesh from scratch.
 Outputs standard COLMAP (points3D.txt, images.txt, cameras.txt) and standard .PLY / .OBJ 3D formats.
 """
@@ -421,7 +421,7 @@ class PhotogrammetryReconstructor:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AeroMap End-to-End 3D Photogrammetry & SfM Reconstructor")
+    parser = argparse.ArgumentParser(description="Aevora End-to-End 3D Photogrammetry & SfM Reconstructor")
     parser.add_argument("--images_dir", "--images", type=str, default="./input_images", help="Path to input directory of raw images")
     parser.add_argument("--output_dir", "--output", type=str, default="./reconstruction_output", help="Directory where 3D points & mesh will be saved")
     parser.add_argument("--max_features", type=int, default=4000, help="Max SIFT features per photo")

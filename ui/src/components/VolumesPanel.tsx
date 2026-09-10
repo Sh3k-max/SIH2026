@@ -440,7 +440,7 @@ export const VolumesPanel: React.FC<VolumesPanelProps> = ({ unit, activeProject,
               <div className="space-y-2">
                 <h3 className="font-display font-extrabold text-base text-slate-900 uppercase tracking-tight">DSM Matrix Pending</h3>
                 <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                  This project has not been processed yet. AeroMap needs to execute the **VGGT + DUSt3R Hybrid Reconstruction Engine** to generate the Digital Surface Model (DSM).
+                  This project has not been processed yet. Aevora needs to execute the **VGGT + DUSt3R Hybrid Reconstruction Engine** to generate the Digital Surface Model (DSM).
                 </p>
               </div>
               <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-xl text-[10.5px] text-slate-550 leading-relaxed font-mono text-left space-y-1.5">
