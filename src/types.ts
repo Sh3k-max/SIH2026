@@ -131,4 +131,34 @@ export const MOCK_GCPS: GCP[] = [
   { id: 'gcp-4', name: 'GCP_004', lat: 34.0529, lng: -118.2498, alt: 120.1, x: 310, y: 390, status: 'unmeasured' },
 ];
 
-export const MOCK_PROJECTS: Project[] = [];
+export const MOCK_PROJECTS: Project[] = [
+  {
+    id: 'proj-dji-1001',
+    name: 'DJI 1001 - Single-Pass Aerial Survey (Viser Cache)',
+    path: 'SIH_SINGLEPASS/scene/DJI_1001',
+    type: 'new',
+    imageCount: 83,
+    images: [],
+    coordinateSystem: 'WGS-84 / UTM Zone 14N',
+    datum: 'WGS-84',
+    unit: 'm',
+    createdAt: '2026-09-26 10:30',
+    isProcessed: true,
+    datasetName: 'DJI_1001',
+    cameras: MOCK_CAMERAS
+  },
+  {
+    id: 'proj-south-building',
+    name: 'South Building Photogrammetry Survey',
+    path: 'south-building',
+    type: 'new',
+    imageCount: 128,
+    images: [],
+    coordinateSystem: 'WGS-84',
+    datum: 'WGS-84',
+    unit: 'm',
+    createdAt: '2026-09-25 14:15',
+    isProcessed: true,
+    datasetName: 'south-building'
+  }
+];

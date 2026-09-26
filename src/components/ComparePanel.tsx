@@ -1,19 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { 
-  Columns, 
-  Split, 
-  RotateCw, 
   Activity, 
-  Sliders, 
-  Layers, 
-  CheckCircle2, 
+  Columns,
   Lock, 
   Unlock,
-  Eye,
-  Info,
   ShieldCheck,
-  Zap,
   Target
 } from 'lucide-react';
 import type { Project } from '../types';
@@ -24,7 +16,7 @@ interface ComparePanelProps {
   setCurrentView?: (view: string) => void;
 }
 
-export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject, setCurrentView }) => {
+export const ComparePanel: React.FC<ComparePanelProps> = ({ activeProject: _activeProject, setCurrentView: _setCurrentView }) => {
   const leftMountRef = useRef<HTMLDivElement>(null);
   const rightMountRef = useRef<HTMLDivElement>(null);
 

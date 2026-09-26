@@ -2,15 +2,10 @@ import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { 
   RotateCw, 
-  Info,
-  Maximize2,
-  Globe,
   AlertTriangle,
-  Server,
   Activity,
   Compass,
-  Sliders,
-  Layers
+  Sliders
 } from 'lucide-react';
 import type { Project } from '../types';
 import { buildPhotogrammetryScene, loadRealPhotogrammetryMesh } from '../utils/photogrammetryScene';
@@ -28,10 +23,10 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
   const reqIdRef = useRef<number | null>(null);
   
   // Viewer Mode Selection
-  const [viewerMode, setViewerMode] = useState<'inference' | 'demo'>('demo');
+  const [_viewerMode, _setViewerMode] = useState<'inference' | 'demo'>('demo');
   const [structureType, setStructureType] = useState<'building' | 'bridge' | 'solar' | 'terrain'>('building');
   const [availableDatasets, setAvailableDatasets] = useState<Array<{ name: string; lastModified: string }>>([]);
-  const [activeDataset, setActiveDataset] = useState<string>('system_reconstructed_model');
+  const [activeDataset, setActiveDataset] = useState<string>(activeProject?.datasetName || 'south-building');
 
   // Navigation Mode: 'fly' (GeoGuessr Walk/Fly WASD) or 'orbit' (Turntable Inspection)
   const [navMode, setNavMode] = useState<'fly' | 'orbit'>('fly');
@@ -39,9 +34,9 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
   const [moveSpeed, setMoveSpeed] = useState<number>(14);
 
   // Server Connection States
-  const [serverUrl, setServerUrl] = useState<string>('http://localhost:5000');
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking' | 'degraded'>('offline');
-  const [systemSpecs, setSystemSpecs] = useState<{
+  const [serverUrl, _setServerUrl] = useState<string>('http://localhost:5000');
+  const [_connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking' | 'degraded'>('offline');
+  const [_systemSpecs, setSystemSpecs] = useState<{
     gpuAvailable: boolean;
     gpuName: string;
     gpuVram: string;
@@ -79,15 +74,17 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
   // Camera Orbit & Look control states
   const [yaw, setYaw] = useState<number>(-0.4);   
   const [pitch, setPitch] = useState<number>(0.3);  
-  const [zoom, setZoom] = useState<number>(1.0);    
+  const [zoom, _setZoom] = useState<number>(1.0);    
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const rotationStart = useRef<{ yaw: number; pitch: number }>({ yaw: -0.4, pitch: 0.3 });
 
   // Render settings
   const [showWireframe, setShowWireframe] = useState<boolean>(false);
-  const [showTextures, setShowTextures] = useState<boolean>(true);
+  const [_showTextures, _setShowTextures] = useState<boolean>(true);
   const [lightingIntensity, setLightingIntensity] = useState<number>(1.2);
+  const [showCameras, _setShowCameras] = useState<boolean>(true);
+  const [showGrid, _setShowGrid] = useState<boolean>(true);
 
   // Test Server Connection handler
   const testServerConnection = async () => {
@@ -262,6 +259,8 @@ export const MeshViewerPanel: React.FC<MeshViewerPanelProps> = ({ activeProject,
         } else {
           buildPhotogrammetryScene(scene, structureType);
         }
+      }).catch(() => {
+        buildPhotogrammetryScene(scene, structureType);
       });
     } else {
       buildPhotogrammetryScene(scene, structureType);

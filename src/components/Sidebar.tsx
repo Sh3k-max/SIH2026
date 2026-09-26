@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Map, Box, Layers, Settings, LogOut, Globe, Columns } from 'lucide-react';
+import { Home, Map, Box, Layers, Settings, LogOut, Globe, Columns, Database } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
@@ -20,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'raycloud', label: 'RayCloud', icon: Box, requiresProject: true },
     { id: 'mesh', label: '3D Mesh', icon: Globe, requiresProject: true },
     { id: 'compare', label: 'Compare', icon: Columns, requiresProject: true },
+    { id: 'cache', label: 'AI Cache', icon: Database, requiresProject: true },
     { id: 'volumes', label: 'Volumes', icon: Layers, requiresProject: true },
     { id: 'processing', label: 'Processing', icon: Settings, requiresProject: true }
   ];

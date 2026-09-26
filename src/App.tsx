@@ -7,6 +7,7 @@ import { RayCloudPanel } from './components/RayCloudPanel';
 import { VolumesPanel } from './components/VolumesPanel';
 import { MeshViewerPanel } from './components/MeshViewerPanel';
 import { ComparePanel } from './components/ComparePanel';
+import { ModelCacheViewer } from './components/ModelCacheViewer';
 import type { Project, CameraTelemetry } from './types';
 import { MOCK_PROJECTS } from './types';
 import { 
@@ -22,7 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import heroVideoBg from './assets/Timeline 1.mov';
-import bridgeWireframe from 'D:\\clone\\src\\assets\\ChatGPT_Image_Aug_30_2026_04_33_05_PM.png';
+import bridgeWireframe from './assets/ChatGPT_Image_Aug_30_2026_04_33_05_PM.png';
 import stockpileDem from './assets/image.png';
 import concreteDamage from './assets/ChatGPT_Image_Aug_30_2026_04_38_12_PM.png';
 import solarOverhang from './assets/ChatGPT_Image_Aug_30_2026_04_42_04_PM.png';
@@ -49,7 +50,7 @@ export default function App() {
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const [projectList, setProjectList] = useState<Project[]>(MOCK_PROJECTS);
 
-  const isWorkspaceView = ['dashboard', 'map', 'raycloud', 'mesh', 'compare', 'volumes', 'processing'].includes(currentView);
+  const isWorkspaceView = ['dashboard', 'map', 'raycloud', 'mesh', 'compare', 'cache', 'volumes', 'processing'].includes(currentView);
 
   // Ensure dark class is removed on mount
   useEffect(() => {
@@ -1053,7 +1054,10 @@ export default function App() {
 
           {/* VIEW: 3D RAYCLOUD POINT CLOUD */}
           {currentView === 'raycloud' && activeProject && (
-            <RayCloudPanel activeProject={activeProject} />
+            <RayCloudPanel 
+              activeProject={activeProject} 
+              setCurrentView={setCurrentView}
+            />
           )}
 
           {/* VIEW: 3D TEXTURED MESH VIEWER */}
@@ -1070,6 +1074,20 @@ export default function App() {
               activeProject={activeProject}
               setCurrentView={setCurrentView}
             />
+          )}
+
+          {/* VIEW: MODEL CACHE VIEWER — always mounted to preserve WebGL context */}
+          {activeProject && (
+            <div
+              className="w-full h-full"
+              style={{ display: currentView === 'cache' ? 'flex' : 'none', flexDirection: 'column' }}
+            >
+              <ModelCacheViewer
+                activeProject={activeProject}
+                setCurrentView={setCurrentView}
+                isVisible={currentView === 'cache'}
+              />
+            </div>
           )}
 
           {/* VIEW: VOLUMES ANALYSIS PANEL */}

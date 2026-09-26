@@ -425,7 +425,7 @@ export function buildPhotogrammetryScene(scene: THREE.Scene, type: 'building' | 
 }
 
 // 3. High-Density Photogrammetric Point Cloud (50,000+ points)
-export function generateDensePointCloud(type: 'building' | 'bridge' | 'solar' | 'terrain' = 'building'): THREE.Points {
+export function generateDensePointCloud(_type: 'building' | 'bridge' | 'solar' | 'terrain' = 'building'): THREE.Points {
   const pointCount = 45000;
   const positions = new Float32Array(pointCount * 3);
   const colors = new Float32Array(pointCount * 3);
@@ -514,53 +514,98 @@ export function generateDensePointCloud(type: 'building' | 'bridge' | 'solar' | 
 // 4. Universal Loader for any COLMAP / Reconstructed Dataset
 export async function loadDatasetPointCloud(datasetName: string = 'south-building', serverUrl: string = 'http://localhost:5000'): Promise<{ points: THREE.Points; count: number; cameras: Array<{ name: string; x: number; y: number; z: number }> } | null> {
   try {
-    const res = await fetch(`${serverUrl}/api/datasets/${datasetName}/sparse`);
+    const res = await fetch(`${serverUrl}/api/datasets/${datasetName}/sparse`, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error('Dataset endpoint returned ' + res.status);
-    const data = await res.json();
-    if (!data.positions || data.positions.length === 0) return null;
 
-    const rawPos = data.positions;
-    const rawCol = data.colors;
-    const pCount = data.pointCount;
+    const pCountStr = res.headers.get('X-Point-Count');
+    let positions: Float32Array;
+    let colors: Float32Array;
+    let pCount = 0;
+    let scaledCameras: Array<{ name: string; x: number; y: number; z: number }> = [];
 
-    // Calculate center of mass to align model at origin
-    let sumX = 0, sumY = 0, sumZ = 0;
-    for (let i = 0; i < pCount; i++) {
-      sumX += rawPos[i * 3];
-      sumY += rawPos[i * 3 + 1];
-      sumZ += rawPos[i * 3 + 2];
-    }
-    const avgX = sumX / pCount;
-    const avgY = sumY / pCount;
-    const avgZ = sumZ / pCount;
+    if (pCountStr) {
+      // Binary streaming format (e.g. DJI_1001 npz cache)
+      pCount = parseInt(pCountStr, 10);
+      const rawBuffer = await res.arrayBuffer();
+      const byteLen = pCount * 3 * 4;
+      positions = new Float32Array(rawBuffer.slice(0, byteLen));
+      colors = new Float32Array(rawBuffer.slice(byteLen, byteLen * 2));
+    } else {
+      // JSON format (e.g. COLMAP points3D.txt)
+      const data = await res.json();
+      if (!data.positions || data.positions.length === 0) return null;
 
-    const scale = 40.0;
+      const rawPos = data.positions;
+      const rawCol = data.colors;
+      pCount = data.pointCount;
 
-    const positions = new Float32Array(pCount * 3);
-    const colors = new Float32Array(rawCol);
+      let sumX = 0, sumY = 0, sumZ = 0;
+      for (let i = 0; i < pCount; i++) {
+        sumX += rawPos[i * 3];
+        sumY += rawPos[i * 3 + 1];
+        sumZ += rawPos[i * 3 + 2];
+      }
+      const avgX = sumX / pCount;
+      const avgY = sumY / pCount;
+      const avgZ = sumZ / pCount;
 
-    for (let i = 0; i < pCount; i++) {
-      positions[i * 3] = (rawPos[i * 3] - avgX) * scale;
-      positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale;
-      positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
+      let maxCoord = 0;
+      for (let i = 0; i < Math.min(300, rawPos.length); i++) {
+        const v = Math.abs(rawPos[i]);
+        if (v > maxCoord) maxCoord = v;
+      }
+      const scale = maxCoord > 5.0 ? 1.0 : 40.0;
+
+      positions = new Float32Array(pCount * 3);
+      colors = new Float32Array(rawCol);
+
+      for (let i = 0; i < pCount; i++) {
+        positions[i * 3] = (rawPos[i * 3] - avgX) * scale;
+        positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale;
+        positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
+      }
+
+      scaledCameras = (data.cameras || []).map((c: { name: string; x: number; y: number; z: number }) => ({
+        name: c.name,
+        x: (c.x - avgX) * scale,
+        y: -(c.y - avgY) * scale,
+        z: (c.z - avgZ) * scale
+      }));
     }
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const material = new THREE.PointsMaterial({
-      size: 1.5,
-      vertexColors: true,
-      sizeAttenuation: true
-    });
+    // Circular soft splat texture for smooth Viser-like rendering
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    let circleTex: THREE.CanvasTexture | undefined;
+    if (ctx) {
+      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      grad.addColorStop(0.35, 'rgba(255, 255, 255, 0.95)');
+      grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.4)');
+      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
+      circleTex = new THREE.CanvasTexture(canvas);
+      circleTex.needsUpdate = true;
+    }
 
-    const scaledCameras = (data.cameras || []).map((c: { name: string; x: number; y: number; z: number }) => ({
-      name: c.name,
-      x: (c.x - avgX) * scale,
-      y: -(c.y - avgY) * scale,
-      z: (c.z - avgZ) * scale
-    }));
+    const material = new THREE.PointsMaterial({
+      size: 1.8,
+      vertexColors: true,
+      sizeAttenuation: true,
+      map: circleTex,
+      transparent: true,
+      alphaTest: 0.02,
+      opacity: 0.98,
+      blending: THREE.NormalBlending,
+      depthWrite: true
+    });
 
     return {
       points: new THREE.Points(geometry, material),
@@ -580,35 +625,56 @@ export async function loadSouthBuildingPointCloud(serverUrl: string = 'http://lo
 // 5. Build Solid Photogrammetric 3D Surface Mesh from Real Reconstructed Point Cloud
 export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-building', serverUrl: string = 'http://localhost:5000'): Promise<{ mesh: THREE.Mesh; count: number; cameras: Array<{ name: string; x: number; y: number; z: number }> } | null> {
   try {
-    const res = await fetch(`${serverUrl}/api/datasets/${datasetName}/sparse`);
+    const res = await fetch(`${serverUrl}/api/datasets/${datasetName}/sparse`, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error('Dataset endpoint returned ' + res.status);
-    const data = await res.json();
-    if (!data.positions || data.positions.length === 0) return null;
 
-    const rawPos = data.positions;
-    const rawCol = data.colors;
-    const pCount = data.pointCount;
+    const pCountStr = res.headers.get('X-Point-Count');
+    let positions: Float32Array;
+    let colors: Float32Array;
+    let pCount = 0;
+    let scaledCameras: Array<{ name: string; x: number; y: number; z: number }> = [];
 
-    // Calculate center of mass
-    let sumX = 0, sumY = 0, sumZ = 0;
-    for (let i = 0; i < pCount; i++) {
-      sumX += rawPos[i * 3];
-      sumY += rawPos[i * 3 + 1];
-      sumZ += rawPos[i * 3 + 2];
-    }
-    const avgX = sumX / pCount;
-    const avgY = sumY / pCount;
-    const avgZ = sumZ / pCount;
+    if (pCountStr) {
+      pCount = parseInt(pCountStr, 10);
+      const rawBuffer = await res.arrayBuffer();
+      const byteLen = pCount * 3 * 4;
+      positions = new Float32Array(rawBuffer.slice(0, byteLen));
+      colors = new Float32Array(rawBuffer.slice(byteLen, byteLen * 2));
+    } else {
+      const data = await res.json();
+      if (!data.positions || data.positions.length === 0) return null;
 
-    const scale = 40.0;
+      const rawPos = data.positions;
+      const rawCol = data.colors;
+      pCount = data.pointCount;
 
-    const positions = new Float32Array(pCount * 3);
-    const colors = new Float32Array(rawCol);
+      let sumX = 0, sumY = 0, sumZ = 0;
+      for (let i = 0; i < pCount; i++) {
+        sumX += rawPos[i * 3];
+        sumY += rawPos[i * 3 + 1];
+        sumZ += rawPos[i * 3 + 2];
+      }
+      const avgX = sumX / pCount;
+      const avgY = sumY / pCount;
+      const avgZ = sumZ / pCount;
 
-    for (let i = 0; i < pCount; i++) {
-      positions[i * 3] = (rawPos[i * 3] - avgX) * scale;
-      positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale;
-      positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
+      const scale = 40.0;
+
+      positions = new Float32Array(pCount * 3);
+      colors = new Float32Array(rawCol);
+
+      for (let i = 0; i < pCount; i++) {
+        positions[i * 3] = (rawPos[i * 3] - avgX) * scale;
+        positions[i * 3 + 1] = -(rawPos[i * 3 + 1] - avgY) * scale;
+        positions[i * 3 + 2] = (rawPos[i * 3 + 2] - avgZ) * scale;
+      }
+
+      scaledCameras = (data.cameras || []).map((c: { name: string; x: number; y: number; z: number }) => ({
+        name: c.name,
+        x: (c.x - avgX) * scale,
+        y: -(c.y - avgY) * scale,
+        z: (c.z - avgZ) * scale
+      }));
     }
 
     // Generate clean solid surface geometry without distant spiky shards
@@ -677,13 +743,6 @@ export async function loadRealPhotogrammetryMesh(datasetName: string = 'south-bu
     });
     const surfelPoints = new THREE.Points(geometry, surfelMat);
     meshGroup.add(surfelPoints);
-
-    const scaledCameras = (data.cameras || []).map((c: { name: string; x: number; y: number; z: number }) => ({
-      name: c.name,
-      x: (c.x - avgX) * scale,
-      y: -(c.y - avgY) * scale,
-      z: (c.z - avgZ) * scale
-    }));
 
     return {
       mesh: meshGroup as unknown as THREE.Mesh,
